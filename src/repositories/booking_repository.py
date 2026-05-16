@@ -196,14 +196,59 @@ class BookingRepository(RepositoryInterface[Booking]):
 
     @staticmethod
     def delete(entity_id: str) -> None:
-        """Delete a booking by identifier."""
+        """
+        Delete a booking and its dependent invoice/payment records.
+
+        Payments and invoices are removed first because SQLite prevents
+        deleting a booking while dependent records still reference it.
+        """
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
 
-        cursor.execute("DELETE FROM bookings WHERE booking_id = ?", (entity_id,))
+        try:
+            cursor.execute(
+                """
+                SELECT invoice_id
+                FROM invoices
+                WHERE booking_id = ?
+                """,
+                (entity_id,),
+            )
+            invoice_ids = [row["invoice_id"] for row in cursor.fetchall()]
 
-        connection.commit()
-        connection.close()
+            for invoice_id in invoice_ids:
+                cursor.execute(
+                    """
+                    DELETE FROM payments
+                    WHERE invoice_id = ?
+                    """,
+                    (invoice_id,),
+                )
+
+            cursor.execute(
+                """
+                DELETE FROM invoices
+                WHERE booking_id = ?
+                """,
+                (entity_id,),
+            )
+
+            cursor.execute(
+                """
+                DELETE FROM bookings
+                WHERE booking_id = ?
+                """,
+                (entity_id,),
+            )
+
+            connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
+
+        finally:
+            connection.close()
 
     @staticmethod
     def save_related_entities(booking: Booking) -> None:

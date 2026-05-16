@@ -10,6 +10,7 @@ import customtkinter as ctk
 
 from src.models.base_entity import BaseEntity
 from src.models.customer import Customer
+from src.repositories.booking_repository import BookingRepository
 from src.repositories.customer_repository import CustomerRepository
 from src.ui.theme import APP_COLORS, APP_FONTS
 
@@ -129,13 +130,16 @@ class CustomersView(ctk.CTkFrame):
             self._table_label(row_index, 2, customer.phone_number)
             self._table_label(row_index, 3, customer.address)
 
+            customer_status = self._customer_status(customer)
+            status_bg, status_fg = self._status_colours(customer_status)
+
             status = ctk.CTkLabel(
                 self.table_frame,
-                text="Active",
-                text_color=APP_COLORS["success"],
-                fg_color="#dcfce7",
+                text=customer_status,
+                text_color=status_fg,
+                fg_color=status_bg,
                 corner_radius=10,
-                width=70,
+                width=76,
                 height=24,
                 font=APP_FONTS["small"],
             )
@@ -191,6 +195,7 @@ class CustomersView(ctk.CTkFrame):
             or search_text in customer.email.lower()
             or search_text in customer.phone_number.lower()
             or search_text in customer.address.lower()
+            or search_text in self._customer_status(customer).lower()
         ]
 
     def _open_customer_modal(self, customer: Customer | None = None) -> None:
@@ -352,17 +357,15 @@ class CustomersView(ctk.CTkFrame):
             self._error("Address must contain letters.")
             return
 
-        if not any (character.isdigit() for character in address):
+        if not any(character.isdigit() for character in address):
             self._error("Address must contain street or building number.")
             return
 
         invalid_patterns = ["asdf", "qwer", "zxcv", "test", "abc"]
 
         if any(pattern in address.lower() for pattern in invalid_patterns):
-             self._error("Please enter a realistic address.")
-             return
-
-
+            self._error("Please enter a realistic address.")
+            return
 
         customer = Customer(
             entity_id=existing_customer.entity_id if existing_customer else BaseEntity.generate_id(),
@@ -377,6 +380,18 @@ class CustomersView(ctk.CTkFrame):
         CustomerRepository.save_customer(customer)
         modal.destroy()
         self._refresh_page()
+
+    def _customer_status(self, customer: Customer) -> str:
+        active_statuses = {"pending", "confirmed", "in progress", "in_progress", "assigned"}
+
+        for booking in BookingRepository.find_all():
+            same_customer = booking.customer.entity_id == customer.entity_id
+            active_booking = str(booking.status).lower() in active_statuses
+
+            if same_customer and active_booking:
+                return "Active"
+
+        return "Inactive"
 
     def _delete_customer(self, customer: Customer) -> None:
         confirmed = messagebox.askyesno(
@@ -399,6 +414,13 @@ class CustomersView(ctk.CTkFrame):
         self.table_frame = None
 
         self._build_page()
+
+    @staticmethod
+    def _status_colours(status: str) -> tuple[str, str]:
+        if status == "Active":
+            return "#dcfce7", APP_COLORS["success"]
+
+        return "#f1f5f9", APP_COLORS["muted_text"]
 
     @staticmethod
     def _error(message: str) -> None:

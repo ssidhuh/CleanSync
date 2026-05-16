@@ -158,7 +158,10 @@ class BookingsView(ctk.CTkFrame):
     def _table_row(self, booking: Booking, row_index: int) -> None:
         time_text = booking.booking_date.strftime("%H:%M")
         if booking.end_time is not None:
-            time_text = f"{booking.booking_date.strftime('%H:%M')} – {booking.end_time.strftime('%H:%M')}"
+            time_text = (
+                f"{booking.booking_date.strftime('%H:%M')} – "
+                f"{booking.end_time.strftime('%H:%M')}"
+            )
 
         amount = booking.total_amount or booking.cleaning_service.base_price
 
@@ -254,8 +257,8 @@ class BookingsView(ctk.CTkFrame):
         body.pack(fill="x", padx=22)
 
         customer_var = ctk.StringVar(value=booking.customer.full_name if booking else "Select customer")
-        cleaner_var = ctk.StringVar(value=booking.cleaner.full_name if booking else "Select cleaner")
         service_var = ctk.StringVar(value=booking.cleaning_service.service_name if booking else "Select service")
+        cleaner_var = ctk.StringVar(value=booking.cleaner.full_name if booking else "Select cleaner")
         status_var = ctk.StringVar(value=booking.status if booking else "Pending")
 
         row_one = ctk.CTkFrame(body, fg_color="transparent")
@@ -271,20 +274,13 @@ class BookingsView(ctk.CTkFrame):
             0,
         )
 
-        cleaner_combo = self._modal_combo(
-            row_one,
-            "Cleaner *",
-            cleaner_var,
-            [cleaner.full_name for cleaner in self.cleaners],
-            0,
-            1,
-        )
-
         service_combo = self._modal_combo(
-            body,
+            row_one,
             "Service *",
             service_var,
-            self._service_names_for_cleaner(cleaner_var.get()),
+            [service.service_name for service in self.services],
+            0,
+            1,
         )
 
         row_two = ctk.CTkFrame(body, fg_color="transparent")
@@ -305,6 +301,19 @@ class BookingsView(ctk.CTkFrame):
             start_entry.insert(0, "09:00")
             end_entry.insert(0, "12:30")
 
+        cleaner_combo = self._modal_combo(
+            body,
+            "Available Cleaner *",
+            cleaner_var,
+            self._available_cleaner_names(
+                service_var.get(),
+                date_entry.get(),
+                start_entry.get(),
+                end_entry.get(),
+                booking.entity_id if booking else None,
+            ),
+        )
+
         row_three = ctk.CTkFrame(body, fg_color="transparent")
         row_three.pack(fill="x")
         row_three.grid_columnconfigure((0, 1), weight=1)
@@ -320,6 +329,26 @@ class BookingsView(ctk.CTkFrame):
             if customer is not None:
                 address_entry.insert(0, customer.address)
 
+        def refresh_available_cleaners(_event=None) -> None:
+            available_cleaners = self._available_cleaner_names(
+                service_var.get(),
+                date_entry.get(),
+                start_entry.get(),
+                end_entry.get(),
+                booking.entity_id if booking else None,
+            )
+
+            cleaner_combo.configure(values=available_cleaners)
+
+            if cleaner_var.get() not in available_cleaners:
+                cleaner_var.set(
+                    available_cleaners[0]
+                    if available_cleaners
+                    else "No cleaners available"
+                )
+
+            update_total_amount()
+
         def update_total_amount(_event=None) -> None:
             total_amount = self._calculate_total_amount(
                 cleaner_var.get(),
@@ -333,25 +362,20 @@ class BookingsView(ctk.CTkFrame):
             if total_amount is not None:
                 amount_entry.insert(0, f"{total_amount:.2f}")
 
-        def update_services_for_cleaner(selected_cleaner: str) -> None:
-            updated_services = self._service_names_for_cleaner(selected_cleaner)
-            service_var.set("Select service")
-            service_combo.configure(values=updated_services)
-            update_total_amount()
-
         customer_combo.configure(command=update_address_for_customer)
-        cleaner_combo.configure(command=update_services_for_cleaner)
+        service_combo.configure(command=lambda _selected: refresh_available_cleaners())
+        cleaner_combo.configure(command=lambda _selected: update_total_amount())
 
-        date_entry.bind("<KeyRelease>", update_total_amount)
-        start_entry.bind("<KeyRelease>", update_total_amount)
-        end_entry.bind("<KeyRelease>", update_total_amount)
+        date_entry.bind("<KeyRelease>", refresh_available_cleaners)
+        start_entry.bind("<KeyRelease>", refresh_available_cleaners)
+        end_entry.bind("<KeyRelease>", refresh_available_cleaners)
 
         if booking is not None:
             address_entry.insert(0, booking.address)
             amount_entry.insert(0, str(booking.total_amount or booking.cleaning_service.base_price))
         else:
             update_address_for_customer(customer_var.get())
-            update_total_amount()
+            refresh_available_cleaners()
 
         self._modal_combo(body, "Status", status_var, BOOKING_STATUSES)
 
@@ -440,13 +464,7 @@ class BookingsView(ctk.CTkFrame):
         service = self._find_by_name(self.services, service_var.get(), "service_name")
 
         if customer is None or cleaner is None or service is None:
-            self._error("Please select a customer, cleaner, and service.")
-            return
-
-        allowed_services = self._service_names_for_cleaner(cleaner.full_name)
-
-        if service.service_name not in allowed_services:
-            self._error("This cleaner does not offer the selected service.")
+            self._error("Please select a customer, service, and available cleaner.")
             return
 
         try:
@@ -467,6 +485,19 @@ class BookingsView(ctk.CTkFrame):
 
         if end_time <= booking_date:
             self._error("End time must be after the start time.")
+            return
+
+        if not self._cleaner_offers_service(cleaner, service.service_name):
+            self._error("The selected cleaner does not offer this service.")
+            return
+
+        if not self._cleaner_is_available_for_time(
+            cleaner,
+            booking_date,
+            end_time,
+            existing_booking.entity_id if existing_booking else None,
+        ):
+            self._error("The selected cleaner is already booked at this date and time.")
             return
 
         total_amount = self._calculate_total_amount(
@@ -543,6 +574,96 @@ class BookingsView(ctk.CTkFrame):
         self._reload_data()
         self._build_page()
 
+    def _available_cleaner_names(
+        self,
+        service_name: str,
+        date_text: str,
+        start_text: str,
+        end_text: str,
+        existing_booking_id: str | None = None,
+    ) -> list[str]:
+        service = self._find_by_name(self.services, service_name, "service_name")
+
+        if service is None:
+            return ["Select service first"]
+
+        try:
+            start_time = datetime.strptime(
+                f"{date_text.strip()} {start_text.strip()}",
+                "%d/%m/%Y %H:%M",
+            )
+            end_time = datetime.strptime(
+                f"{date_text.strip()} {end_text.strip()}",
+                "%d/%m/%Y %H:%M",
+            )
+        except ValueError:
+            return ["Enter valid date/time first"]
+
+        if end_time <= start_time:
+            return ["Enter valid time range"]
+
+        available_cleaners = [
+            cleaner.full_name
+            for cleaner in self.cleaners
+            if self._cleaner_offers_service(cleaner, service.service_name)
+            and self._cleaner_is_available_for_time(
+                cleaner,
+                start_time,
+                end_time,
+                existing_booking_id,
+            )
+        ]
+
+        return available_cleaners if available_cleaners else ["No cleaners available"]
+
+    def _cleaner_offers_service(self, cleaner, service_name: str) -> bool:
+        cleaner_tokens = [
+            item.strip().lower()
+            for item in cleaner.specializations.replace(";", ",").replace("|", ",").split(",")
+            if item.strip()
+        ]
+
+        selected_service = service_name.strip().lower()
+
+        return any(
+            token == selected_service
+            or token in selected_service
+            or selected_service in token
+            for token in cleaner_tokens
+        )
+
+    def _cleaner_is_available_for_time(
+        self,
+        cleaner,
+        start_time: datetime,
+        end_time: datetime,
+        existing_booking_id: str | None = None,
+    ) -> bool:
+        if str(cleaner.status).lower() in {"inactive", "off duty"}:
+            return False
+
+        active_statuses = {"pending", "confirmed", "in progress", "in_progress", "assigned"}
+
+        for booking in BookingRepository.find_all():
+            if booking.entity_id == existing_booking_id:
+                continue
+
+            if booking.cleaner.entity_id != cleaner.entity_id:
+                continue
+
+            if str(booking.status).lower() not in active_statuses:
+                continue
+
+            if booking.end_time is None:
+                continue
+
+            overlaps = start_time < booking.end_time and end_time > booking.booking_date
+
+            if overlaps:
+                return False
+
+        return True
+
     def _calculate_total_amount(
         self,
         cleaner_name: str,
@@ -572,41 +693,6 @@ class BookingsView(ctk.CTkFrame):
 
         duration_hours = (end_time - start_time).total_seconds() / 3600
         return round(duration_hours * cleaner.hourly_rate, 2)
-
-    def _service_names_for_cleaner(self, cleaner_name: str) -> list[str]:
-        cleaner = self._find_by_name(self.cleaners, cleaner_name, "full_name")
-
-        if cleaner is None:
-            return ["Select cleaner first"]
-
-        cleaner_specializations = cleaner.specializations.strip().lower()
-
-        if not cleaner_specializations:
-            return ["No services available"]
-
-        cleaner_tokens = [
-            item.strip()
-            for item in cleaner_specializations.replace(";", ",").replace("|", ",").split(",")
-            if item.strip()
-        ]
-
-        matching_services = []
-
-        for service in self.services:
-            service_name = service.service_name.strip().lower()
-            service_description = service.description.strip().lower()
-
-            for token in cleaner_tokens:
-                if (
-                    token == service_name
-                    or token in service_name
-                    or service_name in token
-                    or token in service_description
-                ):
-                    matching_services.append(service.service_name)
-                    break
-
-        return matching_services if matching_services else ["No services available"]
 
     def _modal_combo(
         self,

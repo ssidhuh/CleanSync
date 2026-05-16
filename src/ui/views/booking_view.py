@@ -169,7 +169,7 @@ class BookingsView(ctk.CTkFrame):
             booking.cleaning_service.service_name,
             booking.booking_date.strftime("%b %d, %Y"),
             time_text,
-            f"${amount:.0f}",
+            f"€{amount:.2f}",
         ]
 
         for column, value in enumerate(values):
@@ -288,41 +288,61 @@ class BookingsView(ctk.CTkFrame):
             self._service_names_for_cleaner(cleaner_var.get()),
         )
 
-        def update_services_for_cleaner(selected_cleaner: str) -> None:
-            updated_services = self._service_names_for_cleaner(selected_cleaner)
-            service_var.set("Select service")
-            service_combo.configure(values=updated_services)
-
-        cleaner_combo.configure(command=update_services_for_cleaner)
-
         row_two = ctk.CTkFrame(body, fg_color="transparent")
         row_two.pack(fill="x")
         row_two.grid_columnconfigure((0, 1, 2), weight=1)
 
         date_entry = self._modal_entry_grid(row_two, "Date *", 0, 0)
         start_entry = self._modal_entry_grid(row_two, "Start Time *", 0, 1)
-        end_entry = self._modal_entry_grid(row_two, "End Time", 0, 2)
+        end_entry = self._modal_entry_grid(row_two, "End Time *", 0, 2)
 
         if booking is not None:
             date_entry.insert(0, booking.booking_date.strftime("%d/%m/%Y"))
-            start_entry.insert(0, booking.booking_date.strftime("%I:%M %p"))
+            start_entry.insert(0, booking.booking_date.strftime("%H:%M"))
             if booking.end_time is not None:
-                end_entry.insert(0, booking.end_time.strftime("%I:%M %p"))
+                end_entry.insert(0, booking.end_time.strftime("%H:%M"))
         else:
             date_entry.insert(0, datetime.now().strftime("%d/%m/%Y"))
-            start_entry.insert(0, "12:30 PM")
-            end_entry.insert(0, "12:30 PM")
+            start_entry.insert(0, "09:00")
+            end_entry.insert(0, "12:30")
 
         row_three = ctk.CTkFrame(body, fg_color="transparent")
         row_three.pack(fill="x")
         row_three.grid_columnconfigure((0, 1), weight=1)
 
         address_entry = self._modal_entry_grid(row_three, "Address", 0, 0)
-        amount_entry = self._modal_entry_grid(row_three, "Total Amount ($)", 0, 1)
+        amount_entry = self._modal_entry_grid(row_three, "Total Amount (€)", 0, 1)
+
+        def update_total_amount(_event=None) -> None:
+            total_amount = self._calculate_total_amount(
+                cleaner_var.get(),
+                date_entry.get(),
+                start_entry.get(),
+                end_entry.get(),
+            )
+
+            amount_entry.delete(0, "end")
+
+            if total_amount is not None:
+                amount_entry.insert(0, f"{total_amount:.2f}")
+
+        def update_services_for_cleaner(selected_cleaner: str) -> None:
+            updated_services = self._service_names_for_cleaner(selected_cleaner)
+            service_var.set("Select service")
+            service_combo.configure(values=updated_services)
+            update_total_amount()
+
+        cleaner_combo.configure(command=update_services_for_cleaner)
+
+        date_entry.bind("<KeyRelease>", update_total_amount)
+        start_entry.bind("<KeyRelease>", update_total_amount)
+        end_entry.bind("<KeyRelease>", update_total_amount)
 
         if booking is not None:
             address_entry.insert(0, booking.address)
             amount_entry.insert(0, str(booking.total_amount or booking.cleaning_service.base_price))
+        else:
+            update_total_amount()
 
         self._modal_combo(body, "Status", status_var, BOOKING_STATUSES)
 
@@ -423,24 +443,32 @@ class BookingsView(ctk.CTkFrame):
         try:
             booking_date = datetime.strptime(
                 f"{date_entry.get().strip()} {start_entry.get().strip()}",
-                "%d/%m/%Y %I:%M %p",
+                "%d/%m/%Y %H:%M",
             )
+
             end_time = datetime.strptime(
                 f"{date_entry.get().strip()} {end_entry.get().strip()}",
-                "%d/%m/%Y %I:%M %p",
+                "%d/%m/%Y %H:%M",
             )
         except ValueError:
-            self._error("Date must be DD/MM/YYYY and time must be like 12:30 PM.")
+            self._error(
+                "Date must be DD/MM/YYYY and time must use 24-hour format, e.g. 09:00 or 14:30."
+            )
             return
 
-        try:
-            total_amount = (
-                float(amount_entry.get().strip())
-                if amount_entry.get().strip()
-                else service.base_price
-            )
-        except ValueError:
-            self._error("Total amount must be a valid number.")
+        if end_time <= booking_date:
+            self._error("End time must be after the start time.")
+            return
+
+        total_amount = self._calculate_total_amount(
+            cleaner.full_name,
+            date_entry.get(),
+            start_entry.get(),
+            end_entry.get(),
+        )
+
+        if total_amount is None or total_amount <= 0:
+            self._error("Total amount must be greater than 0.")
             return
 
         booking = Booking(
@@ -505,6 +533,36 @@ class BookingsView(ctk.CTkFrame):
 
         self._reload_data()
         self._build_page()
+
+    def _calculate_total_amount(
+        self,
+        cleaner_name: str,
+        date_text: str,
+        start_text: str,
+        end_text: str,
+    ) -> float | None:
+        cleaner = self._find_by_name(self.cleaners, cleaner_name, "full_name")
+
+        if cleaner is None:
+            return None
+
+        try:
+            start_time = datetime.strptime(
+                f"{date_text.strip()} {start_text.strip()}",
+                "%d/%m/%Y %H:%M",
+            )
+            end_time = datetime.strptime(
+                f"{date_text.strip()} {end_text.strip()}",
+                "%d/%m/%Y %H:%M",
+            )
+        except ValueError:
+            return None
+
+        if end_time <= start_time:
+            return None
+
+        duration_hours = (end_time - start_time).total_seconds() / 3600
+        return round(duration_hours * cleaner.hourly_rate, 2)
 
     def _service_names_for_cleaner(self, cleaner_name: str) -> list[str]:
         cleaner = self._find_by_name(self.cleaners, cleaner_name, "full_name")

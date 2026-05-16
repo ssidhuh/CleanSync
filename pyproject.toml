@@ -1,0 +1,30 @@
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+]
+
+ignore = [
+    "E501",
+]
+
+[tool.pylint.main]
+init-hook = "import sys; sys.path.append('.')"
+persistent = false
+
+[tool.pylint.messages_control]
+disable = [
+    "duplicate-code",
+    "line-too-long",
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-instance-attributes",
+    "too-many-positional-arguments",
+    "too-many-public-methods",
+]

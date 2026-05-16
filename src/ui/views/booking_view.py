@@ -639,7 +639,7 @@ class BookingsView(ctk.CTkFrame):
         end_time: datetime,
         existing_booking_id: str | None = None,
     ) -> bool:
-        if str(cleaner.status).lower() in {"inactive", "off duty"}:
+        if str(cleaner.status).lower() == "inactive":
             return False
 
         active_statuses = {"pending", "confirmed", "in progress", "in_progress", "assigned"}

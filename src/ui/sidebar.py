@@ -12,6 +12,7 @@ NAV_ITEMS = [
     ("📅", "Bookings", "bookings"),
     ("🗓️", "Schedule", "schedule"),
     ("📄", "Invoices", "invoices"),
+    ("💶", "Cleaner Payroll", "cleaner_payroll"),
     ("💳", "Payments", "payments"),
 ]
 

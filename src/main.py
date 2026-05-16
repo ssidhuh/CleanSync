@@ -12,7 +12,7 @@ def main() -> None:
     maintain as more features are added.
     """
     print("Starting CleanSync from /Users/harpreetsingh/Documents/CleanSync")
-    print("Expected window title: CleanSync VERSION 2")
+    print("Expected window title: CleanSync")
     DatabaseManager.initialise_database()
     run_application()
 

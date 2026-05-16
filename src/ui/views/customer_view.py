@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from tkinter import messagebox
 
@@ -269,7 +270,7 @@ class CustomersView(ctk.CTkFrame):
             hover_color=APP_COLORS["primary_hover"],
             font=APP_FONTS["button"],
             command=lambda: self._save_customer(entries, modal, customer),
-        ).pack(side="right",fill="x", expand=True, padx=(0, 8))
+        ).pack(side="right", fill="x", expand=True, padx=(0, 8))
 
     def _modal_entry(self, parent, label: str) -> ctk.CTkEntry:
         ctk.CTkLabel(
@@ -300,19 +301,78 @@ class CustomersView(ctk.CTkFrame):
             self._error("Please complete all required fields.")
             return
 
+        first_name = values["First Name"]
+        last_name = values["Last Name"]
+        email = values["Email"]
+        phone_number = values["Phone Number"]
+        address = values["Address"]
+
+        if len(first_name) < 2 or not first_name.replace(" ", "").isalpha():
+            self._error("First name must contain valid letters only.")
+            return
+
+        if len(last_name) < 2 or not last_name.replace(" ", "").isalpha():
+            self._error("Last name must contain valid letters only.")
+            return
+
+        email_pattern = (
+            r"^[A-Za-z0-9._%+-]+@"
+            r"(gmail|yahoo|outlook|hotmail|icloud|protonmail|inbox)"
+            r"\.(com|lv|co\.uk|org|net)$"
+        )
+
+        if not re.match(email_pattern, email.lower()):
+            self._error(
+                "Please enter a valid email address "
+                "(example: name@gmail.com)."
+            )
+            return
+
+        cleaned_phone = (
+            phone_number.replace(" ", "")
+            .replace("-", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("+", "")
+        )
+
+        if not cleaned_phone.isdigit():
+            self._error("Phone number must contain digits only.")
+            return
+
+        if len(cleaned_phone) < 8 or len(cleaned_phone) > 15:
+            self._error("Phone number must contain 8–15 digits.")
+            return
+
+        if len(address) < 8:
+            self._error("Address must be at least 8 characters long.")
+            return
+
+        if not any(character.isalpha() for character in address):
+            self._error("Address must contain letters.")
+            return
+        
+        if not any (character.isdigit() for character in address):
+            self._error("Address must contain street or building number.")
+            return
+        
+        invalid_patterns = ["asdf", "qwer", "zxcv", "test", "abc"]
+
+        if any(pattern in address.lower() for pattern in invalid_patterns):
+             self._error("Please enter a realistic address.")
+             return
+
+        
+
         customer = Customer(
             entity_id=existing_customer.entity_id if existing_customer else BaseEntity.generate_id(),
             created_at=existing_customer.created_at if existing_customer else datetime.now(),
-            first_name=values["First Name"],
-            last_name=values["Last Name"],
-            phone_number=values["Phone Number"],
-            email=values["Email"],
-            address=values["Address"],
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=phone_number,
+            email=email,
+            address=address,
         )
-
-        if not customer.validate_contact_information():
-            self._error("Please enter a valid email and phone number.")
-            return
 
         CustomerRepository.save_customer(customer)
         modal.destroy()
@@ -342,4 +402,4 @@ class CustomersView(ctk.CTkFrame):
 
     @staticmethod
     def _error(message: str) -> None:
-        messagebox.showerror("Validation Error", message)
+        messagebox.showerror("Validation Error", message) 

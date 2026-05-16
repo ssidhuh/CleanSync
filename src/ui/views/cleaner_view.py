@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from tkinter import messagebox
 
@@ -275,15 +276,39 @@ class CleanersView(ctk.CTkFrame):
         row_one.pack(fill="x")
         row_one.grid_columnconfigure((0, 1), weight=1)
 
-        entries["Email"] = self._modal_entry_grid(row_one, "Email", "e.g. john@example.com", 0, 0)
-        entries["Phone Number"] = self._modal_entry_grid(row_one, "Phone *", "e.g. (555) 123-4567", 0, 1)
+        entries["Email"] = self._modal_entry_grid(
+            row_one,
+            "Email *",
+            "e.g. john@cleansync.com",
+            0,
+            0,
+        )
+        entries["Phone Number"] = self._modal_entry_grid(
+            row_one,
+            "Phone *",
+            "e.g. (+371) 123-4567",
+            0,
+            1,
+        )
 
         row_two = ctk.CTkFrame(body, fg_color="transparent")
         row_two.pack(fill="x")
         row_two.grid_columnconfigure((0, 1), weight=1)
 
-        entries["Hourly Rate"] = self._modal_entry_grid(row_two, "Hourly Rate (€) *", "e.g. 25.00", 0, 0)
-        entries["Rating"] = self._modal_entry_grid(row_two, "Rating (1-5)", "e.g. 4.5", 0, 1)
+        entries["Hourly Rate"] = self._modal_entry_grid(
+            row_two,
+            "Hourly Rate (€) *",
+            "e.g. 25.00",
+            0,
+            0,
+        )
+        entries["Rating"] = self._modal_entry_grid(
+            row_two,
+            "Rating (1-5)",
+            "e.g. 4.5",
+            0,
+            1,
+        )
 
         ctk.CTkLabel(
             body,
@@ -465,7 +490,14 @@ class CleanersView(ctk.CTkFrame):
         entry.pack(fill="x")
         return entry
 
-    def _modal_entry_grid(self, parent, label: str, placeholder: str, row: int, column: int) -> ctk.CTkEntry:
+    def _modal_entry_grid(
+        self,
+        parent,
+        label: str,
+        placeholder: str,
+        row: int,
+        column: int,
+    ) -> ctk.CTkEntry:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=row, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0))
 
@@ -499,11 +531,58 @@ class CleanersView(ctk.CTkFrame):
 
         if (
             not values["Full Name"]
+            or not values["Email"]
             or not values["Phone Number"]
             or not values["Hourly Rate"]
             or not final_specializations
         ):
             self._error("Please complete all required fields.")
+            return
+
+        name_parts = values["Full Name"].split(maxsplit=1)
+
+        if len(name_parts) < 2:
+            self._error("Please enter both first and last name.")
+            return
+
+        if not name_parts[0].isalpha():
+            self._error("First name must contain letters only.")
+            return
+
+        if not name_parts[1].replace(" ", "").isalpha():
+            self._error("Last name must contain letters only.")
+            return
+
+        email = values["Email"].strip().lower()
+
+        if not email.endswith("@cleansync.com"):
+            self._error("Cleaner email must use the company domain (@cleansync.com).")
+            return
+
+        email_pattern = r"^[A-Za-z0-9._%+-]+@cleansync\.com$"
+
+        if not re.match(email_pattern, email):
+            self._error(
+                "Please enter a valid CleanSync company email, "
+                "e.g. john@cleansync.com."
+            )
+            return
+
+        cleaned_phone = (
+            values["Phone Number"]
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("+", "")
+        )
+
+        if not cleaned_phone.isdigit():
+            self._error("Phone number must contain digits only.")
+            return
+
+        if len(cleaned_phone) < 8 or len(cleaned_phone) > 15:
+            self._error("Phone number must contain 8–15 digits.")
             return
 
         try:
@@ -521,14 +600,12 @@ class CleanersView(ctk.CTkFrame):
             self._error("Rating must be between 1 and 5.")
             return
 
-        name_parts = values["Full Name"].split(maxsplit=1)
-
         cleaner = Cleaner(
             entity_id=existing_cleaner.entity_id if existing_cleaner else BaseEntity.generate_id(),
             created_at=existing_cleaner.created_at if existing_cleaner else datetime.now(),
             first_name=name_parts[0],
-            last_name=name_parts[1] if len(name_parts) > 1 else "",
-            email=values["Email"] or "not-provided@cleansync.local",
+            last_name=name_parts[1],
+            email=email,
             phone_number=values["Phone Number"],
             hourly_rate=hourly_rate,
             rating=rating,
@@ -536,10 +613,6 @@ class CleanersView(ctk.CTkFrame):
             specializations=", ".join(final_specializations),
             service_area="",
         )
-
-        if not cleaner.validate_profile():
-            self._error("Please enter valid cleaner information.")
-            return
 
         CleanerRepository.save_cleaner(cleaner)
         modal.destroy()

@@ -263,7 +263,7 @@ class BookingsView(ctk.CTkFrame):
         row_one.pack(fill="x")
         row_one.grid_columnconfigure((0, 1), weight=1)
 
-        self._modal_combo(
+        customer_combo = self._modal_combo(
             row_one,
             "Customer *",
             customer_var,
@@ -313,6 +313,14 @@ class BookingsView(ctk.CTkFrame):
         address_entry = self._modal_entry_grid(row_three, "Address", 0, 0)
         amount_entry = self._modal_entry_grid(row_three, "Total Amount (€)", 0, 1)
 
+        def update_address_for_customer(selected_customer: str) -> None:
+            customer = self._find_by_name(self.customers, selected_customer, "full_name")
+
+            address_entry.delete(0, "end")
+
+            if customer is not None:
+                address_entry.insert(0, customer.address)
+
         def update_total_amount(_event=None) -> None:
             total_amount = self._calculate_total_amount(
                 cleaner_var.get(),
@@ -332,6 +340,7 @@ class BookingsView(ctk.CTkFrame):
             service_combo.configure(values=updated_services)
             update_total_amount()
 
+        customer_combo.configure(command=update_address_for_customer)
         cleaner_combo.configure(command=update_services_for_cleaner)
 
         date_entry.bind("<KeyRelease>", update_total_amount)
@@ -342,6 +351,7 @@ class BookingsView(ctk.CTkFrame):
             address_entry.insert(0, booking.address)
             amount_entry.insert(0, str(booking.total_amount or booking.cleaning_service.base_price))
         else:
+            update_address_for_customer(customer_var.get())
             update_total_amount()
 
         self._modal_combo(body, "Status", status_var, BOOKING_STATUSES)

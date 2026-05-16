@@ -13,7 +13,6 @@ from src.repositories.booking_repository import BookingRepository
 from src.repositories.invoice_repository import InvoiceRepository
 from src.ui.theme import APP_COLORS, APP_FONTS
 
-
 INVOICE_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"]
 
 

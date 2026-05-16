@@ -4,7 +4,6 @@ import customtkinter as ctk
 
 from src.ui.theme import APP_COLORS, APP_FONTS
 
-
 NAV_ITEMS = [
     ("🧰", "Dashboard", "dashboard"),
     ("👥", "Customers", "customers"),

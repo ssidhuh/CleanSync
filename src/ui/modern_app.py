@@ -7,10 +7,10 @@ import customtkinter as ctk
 
 from src.ui.sidebar import Sidebar
 from src.ui.theme import APP_COLORS
-from src.ui.views.dashboard_view import DashboardView
 from src.ui.views.booking_view import BookingsView
 from src.ui.views.cleaner_view import CleanersView
 from src.ui.views.customer_view import CustomersView
+from src.ui.views.dashboard_view import DashboardView
 from src.ui.views.invoice_view import InvoicesView
 from src.ui.views.payment_view import PaymentsView
 from src.ui.views.schedule_view import ScheduleView
@@ -28,18 +28,18 @@ class CleanSyncModernApp(ctk.CTk):
         self.minsize(1180, 760)
         self.configure(fg_color=APP_COLORS["background"])
 
-        
+
         self.sidebar = Sidebar(self, self.show_page)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        self.content = ctk.CTkFrame(self, fg_color=APP_COLORS["background"]) 
+        self.content = ctk.CTkFrame(self, fg_color=APP_COLORS["background"])
         self.content.pack(side="left", fill="both", expand=True)
         self.content.pack_propagate(False)
 
-        
+
         self.show_page("dashboard")
-        
+
 
     def clear_content(self) -> None:
         """Remove the currently displayed page."""

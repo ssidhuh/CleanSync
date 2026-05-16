@@ -124,7 +124,7 @@ class DatabaseManager:
             "quantity": "INTEGER DEFAULT 1",
             "unit_price": "REAL DEFAULT 0",
             "tax_rate": "REAL DEFAULT 0",
-            "notes": "TEXT DEFAULT ''", 
+            "notes": "TEXT DEFAULT ''",
         }
         cursor.execute("PRAGMA table_info(invoices)")
         existing_columns = {row["name"] for row in cursor.fetchall()}
@@ -151,8 +151,8 @@ class DatabaseManager:
             )
            """
 )
-        
-        
-        
+
+
+
         connection.commit()
         connection.close()

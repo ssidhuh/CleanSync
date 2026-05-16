@@ -13,7 +13,6 @@ from src.repositories.invoice_repository import InvoiceRepository
 from src.repositories.payment_repository import PaymentRepository
 from src.ui.theme import APP_COLORS, APP_FONTS
 
-
 PAYMENT_METHODS = ["cash", "credit card", "bank transfer", "online"]
 PAYMENT_STATUSES = ["pending", "completed", "failed", "refunded"]
 

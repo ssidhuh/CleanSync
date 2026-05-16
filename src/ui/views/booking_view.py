@@ -15,7 +15,6 @@ from src.repositories.customer_repository import CustomerRepository
 from src.repositories.service_repository import ServiceRepository
 from src.ui.theme import APP_COLORS, APP_FONTS
 
-
 BOOKING_STATUSES = ["Pending", "Confirmed", "In Progress", "Completed", "Cancelled"]
 
 

@@ -351,18 +351,18 @@ class CustomersView(ctk.CTkFrame):
         if not any(character.isalpha() for character in address):
             self._error("Address must contain letters.")
             return
-        
+
         if not any (character.isdigit() for character in address):
             self._error("Address must contain street or building number.")
             return
-        
+
         invalid_patterns = ["asdf", "qwer", "zxcv", "test", "abc"]
 
         if any(pattern in address.lower() for pattern in invalid_patterns):
              self._error("Please enter a realistic address.")
              return
 
-        
+
 
         customer = Customer(
             entity_id=existing_customer.entity_id if existing_customer else BaseEntity.generate_id(),
@@ -402,4 +402,4 @@ class CustomersView(ctk.CTkFrame):
 
     @staticmethod
     def _error(message: str) -> None:
-        messagebox.showerror("Validation Error", message) 
+        messagebox.showerror("Validation Error", message)

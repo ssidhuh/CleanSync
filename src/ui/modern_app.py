@@ -23,7 +23,7 @@ class CleanSyncModernApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
 
-        self.title("CleanSync MODERN APP")
+        self.title("CleanSync")
         self.geometry("1180x760")
         self.minsize(1180, 760)
         self.configure(fg_color=APP_COLORS["background"])

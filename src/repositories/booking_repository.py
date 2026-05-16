@@ -175,6 +175,26 @@ class BookingRepository(RepositoryInterface[Booking]):
         return bookings
 
     @staticmethod
+    def find_by_status(status: str | None = None) -> list[Booking]:
+        """
+        Return bookings using Python-style method overloading.
+
+        If no status is provided, all bookings are returned.
+        If a status is provided, only bookings matching that
+        status are returned.
+        """
+        bookings = BookingRepository.find_all()
+
+        if status is None:
+            return bookings
+
+        return [
+            booking
+            for booking in bookings
+            if booking.status.lower() == status.lower()
+        ]
+
+    @staticmethod
     def delete(entity_id: str) -> None:
         """Delete a booking by identifier."""
         connection = DatabaseManager.get_connection()

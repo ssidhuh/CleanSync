@@ -82,7 +82,7 @@ class InvoicesView(ctk.CTkFrame):
             fg_color=APP_COLORS["primary"],
             hover_color=APP_COLORS["primary_hover"],
             font=APP_FONTS["button"],
-            command=lambda: self._open_modal(),
+            command=self._open_modal,
         ).pack(side="left")
 
     def _build_table(self) -> None:
@@ -240,15 +240,22 @@ class InvoicesView(ctk.CTkFrame):
 
         invoice_number_entry = self._modal_entry_grid(row_one, "Invoice #", 0, 0)
 
-        customer_var = ctk.StringVar(value="Select customer")
+        customer_var = ctk.StringVar(value="Select booking")
         if invoice is not None:
-            customer_var.set(invoice.booking.customer.full_name)
+            customer_var.set(
+                f"{invoice.booking.booking_number} - "
+                f"{invoice.booking.customer.full_name}"
+            )
 
         customer_combo = self._modal_combo(
             row_one,
             "Customer *",
             customer_var,
-            [booking.customer.full_name for booking in self.bookings],
+            [
+                f"{booking.booking_number} - "
+                f"{booking.customer.full_name}"
+                for booking in self.bookings
+            ],
             0,
             1,
         )
@@ -260,7 +267,11 @@ class InvoicesView(ctk.CTkFrame):
             if invoice.due_date is not None:
                 due_date_entry.insert(0, invoice.due_date.strftime("%d/%m/%Y"))
         else:
-            invoice_number_entry.insert(0, self._next_invoice_number())
+            if self.bookings:
+                invoice_number_entry.insert(0, self._next_invoice_number(self.bookings[0]))
+            else:
+                invoice_number_entry.insert(0, "INV-0001")
+
             due_date_entry.insert(0, (datetime.now() + timedelta(days=5)).strftime("%d/%m/%Y"))
 
         ctk.CTkLabel(
@@ -423,6 +434,9 @@ class InvoicesView(ctk.CTkFrame):
             if booking is None:
                 return
 
+            invoice_number_entry.delete(0, "end")
+            invoice_number_entry.insert(0, self._next_invoice_number(booking))
+
             for existing_item in line_items.copy():
                 item_frame = existing_item.get("frame")
                 if isinstance(item_frame, ctk.CTkFrame):
@@ -431,10 +445,7 @@ class InvoicesView(ctk.CTkFrame):
             line_items.clear()
 
             service_name = booking.cleaning_service.service_name
-            service_price = (
-                booking.total_amount
-                or booking.cleaning_service.calculate_service_cost()
-            )
+            service_price = booking.total_amount or booking.cleaning_service.calculate_service_cost()
 
             add_line_item(
                 description=service_name,
@@ -456,7 +467,10 @@ class InvoicesView(ctk.CTkFrame):
             tax_entry.insert(0, "0")
 
             if self.bookings:
-                first_customer = self.bookings[0].customer.full_name
+                first_customer = (
+                    f"{self.bookings[0].booking_number} - "
+                    f"{self.bookings[0].customer.full_name}"
+                )
                 customer_var.set(first_customer)
                 autofill_booking_items(first_customer)
             else:
@@ -560,8 +574,14 @@ class InvoicesView(ctk.CTkFrame):
         booking = self._find_booking_by_customer(customer_var.get())
 
         if booking is None:
-            self._error("Please select a valid customer with an existing booking.")
+            self._error("Please select a valid booking.")
             return
+
+        if existing_invoice is None:
+            for invoice in self.invoices:
+                if invoice.booking.entity_id == booking.entity_id:
+                    self._error("An invoice already exists for this booking.")
+                    return
 
         try:
             due_date = datetime.strptime(due_date_entry.get().strip(), "%d/%m/%Y")
@@ -768,13 +788,24 @@ class InvoicesView(ctk.CTkFrame):
 
         return tax_entry
 
-    def _next_invoice_number(self) -> str:
+    def _next_invoice_number(self, booking) -> str:
+        booking_number = getattr(booking, "booking_number", "")
+
+        if booking_number.startswith("BOOK-"):
+            return booking_number.replace("BOOK-", "INV-", 1)
+
         return f"INV-{len(self.invoices) + 1:04d}"
 
     def _find_booking_by_customer(self, customer_name: str):
         for booking in self.bookings:
-            if booking.customer.full_name == customer_name:
+            booking_display = (
+                f"{booking.booking_number} - "
+                f"{booking.customer.full_name}"
+            )
+
+            if booking_display == customer_name:
                 return booking
+
         return None
 
     @staticmethod

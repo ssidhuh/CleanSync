@@ -131,8 +131,18 @@ class BookingsView(ctk.CTkFrame):
 
         rows = self._filtered_bookings()
 
-        headers = ["CUSTOMER", "CLEANER", "SERVICE", "DATE", "TIME", "AMOUNT", "STATUS", ""]
-        widths = [150, 140, 180, 120, 130, 90, 130, 80]
+        headers = [
+            "BOOKING #",
+            "CUSTOMER",
+            "CLEANER",
+            "SERVICE",
+            "DATE",
+            "TIME",
+            "AMOUNT",
+            "STATUS",
+            "",
+        ]
+        widths = [120, 150, 140, 180, 120, 130, 90, 130, 80]
 
         for column, header in enumerate(headers):
             self.table_frame.grid_columnconfigure(column, weight=1, minsize=widths[column])
@@ -149,7 +159,7 @@ class BookingsView(ctk.CTkFrame):
                 text="No bookings found. Create your first booking above.",
                 text_color=APP_COLORS["muted_text"],
                 font=APP_FONTS["body"],
-            ).grid(row=1, column=0, columnspan=8, pady=80)
+            ).grid(row=1, column=0, columnspan=9, pady=80)
             return
 
         for row_index, booking in enumerate(rows, start=1):
@@ -166,6 +176,7 @@ class BookingsView(ctk.CTkFrame):
         amount = booking.total_amount or booking.cleaning_service.base_price
 
         values = [
+            booking.booking_number,
             booking.customer.full_name,
             booking.cleaner.full_name,
             booking.cleaning_service.service_name,
@@ -179,7 +190,7 @@ class BookingsView(ctk.CTkFrame):
                 self.table_frame,
                 text=value,
                 text_color=APP_COLORS["foreground"],
-                font=("Inter", 13, "bold" if column in [0, 5] else "normal"),
+                font=("Inter", 13, "bold" if column in [1, 6] else "normal"),
             ).grid(row=row_index, column=column, sticky="w", padx=10, pady=12)
 
         status_bg, status_fg = self._status_colours(booking.status)
@@ -193,10 +204,10 @@ class BookingsView(ctk.CTkFrame):
             height=24,
             width=96,
             font=("Inter", 11, "bold"),
-        ).grid(row=row_index, column=6, sticky="w", padx=10, pady=12)
+        ).grid(row=row_index, column=7, sticky="w", padx=10, pady=12)
 
         actions = ctk.CTkFrame(self.table_frame, fg_color="transparent")
-        actions.grid(row=row_index, column=7, sticky="w", padx=10, pady=8)
+        actions.grid(row=row_index, column=8, sticky="w", padx=10, pady=8)
 
         ctk.CTkButton(
             actions,
@@ -486,17 +497,17 @@ class BookingsView(ctk.CTkFrame):
         if end_time <= booking_date:
             self._error("End time must be after the start time.")
             return
-        
-        current_time= datetime.now()
 
-        if booking_date.date()< current_time.date():
+        current_time = datetime.now()
+
+        if booking_date.date() < current_time.date():
             self._error("Bookings cannot be created for past dates.")
             return
-        
+
         if (
             booking_date.date() == current_time.date()
             and booking_date.time() < current_time.time()
-        ): 
+        ):
             self._error("Start time must be in the future.")
             return
 
@@ -536,11 +547,19 @@ class BookingsView(ctk.CTkFrame):
             total_amount=total_amount,
             notes=notes_entry.get("1.0", "end").strip(),
             status=status_var.get(),
+            booking_number=(
+                existing_booking.booking_number
+                if existing_booking
+                else self._next_booking_number()
+            ),
         )
 
         BookingRepository.save_booking(booking)
         modal.destroy()
         self._refresh_whole_page()
+
+    def _next_booking_number(self) -> str:
+        return f"BOOK-{len(self.bookings) + 1:04d}"
 
     def _delete_booking(self, booking: Booking) -> None:
         confirmed = messagebox.askyesno(
@@ -562,6 +581,7 @@ class BookingsView(ctk.CTkFrame):
 
         for booking in BookingRepository.find_all():
             searchable = (
+                f"{booking.booking_number} "
                 f"{booking.customer.full_name} "
                 f"{booking.cleaner.full_name} "
                 f"{booking.cleaning_service.service_name} "

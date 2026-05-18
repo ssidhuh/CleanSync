@@ -89,7 +89,9 @@ class DatabaseManager:
             )
             """
         )
-        booking_columns={
+
+        booking_columns = {
+            "booking_number": "TEXT",
             "end_time": "TEXT",
             "address": "TEXT",
             "total_amount": "REAL DEFAULT 0",
@@ -117,7 +119,8 @@ class DatabaseManager:
             )
             """
         )
-        invoice_columns= {
+
+        invoice_columns = {
             "invoice_number": "TEXT",
             "due_date": "TEXT",
             "line_description": "TEXT DEFAULT ''",
@@ -126,6 +129,7 @@ class DatabaseManager:
             "tax_rate": "REAL DEFAULT 0",
             "notes": "TEXT DEFAULT ''",
         }
+
         cursor.execute("PRAGMA table_info(invoices)")
         existing_columns = {row["name"] for row in cursor.fetchall()}
 
@@ -149,10 +153,8 @@ class DatabaseManager:
                  created_at TEXT NOT NULL,
                  FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id)
             )
-           """
-)
-
-
+            """
+        )
 
         connection.commit()
         connection.close()

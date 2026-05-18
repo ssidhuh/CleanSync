@@ -23,6 +23,7 @@ class Booking(BaseEntity):
     cleaning_service: CleaningService
     booking_date: datetime
     status: str
+    booking_number: str = ""
     end_time: datetime | None = None
     address: str = ""
     total_amount: float = 0.0

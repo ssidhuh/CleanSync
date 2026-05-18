@@ -191,4 +191,3 @@ class BookingRepository(RepositoryInterface[Booking]):
         )
 
         connection.commit()
-       

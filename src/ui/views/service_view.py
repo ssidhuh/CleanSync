@@ -147,7 +147,7 @@ class ServicesView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             category_chip,
-            text=self._service_category(service.service_name),
+            text=service.category,
             text_color=APP_COLORS["foreground"],
             font=("Inter", 11, "bold"),
         ).pack(padx=10, pady=3)
@@ -204,22 +204,26 @@ class ServicesView(ctk.CTkFrame):
     def _open_modal(self, service: CleaningService | None = None) -> None:
         modal = ctk.CTkToplevel(self)
         modal.title("Edit Service" if service else "New Service")
-        modal.geometry("460x640")
+        modal.geometry("460x680")
         modal.resizable(False, False)
         modal.grab_set()
 
         card = ctk.CTkFrame(modal, fg_color=APP_COLORS["card"], corner_radius=16)
         card.pack(fill="both", expand=True, padx=18, pady=18)
 
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_rowconfigure(1, weight=1)
+
         top = ctk.CTkFrame(card, fg_color="transparent")
-        top.pack(fill="x", padx=22, pady=(22, 14))
+        top.grid(row=0, column=0, sticky="ew", padx=22, pady=(22, 10))
+        top.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             top,
             text="Edit Service" if service else "New Service",
             text_color=APP_COLORS["foreground"],
             font=("Inter", 20, "bold"),
-        ).pack(side="left")
+        ).grid(row=0, column=0, sticky="w")
 
         ctk.CTkButton(
             top,
@@ -230,10 +234,15 @@ class ServicesView(ctk.CTkFrame):
             hover_color=APP_COLORS["muted"],
             text_color=APP_COLORS["muted_text"],
             command=modal.destroy,
-        ).pack(side="right")
+        ).grid(row=0, column=1, sticky="e")
 
-        body = ctk.CTkFrame(card, fg_color="transparent")
-        body.pack(fill="x", padx=22)
+        body = ctk.CTkScrollableFrame(
+            card,
+            fg_color="transparent",
+            scrollbar_button_color=APP_COLORS["border"],
+            scrollbar_button_hover_color=APP_COLORS["muted_text"],
+        )
+        body.grid(row=1, column=0, sticky="nsew", padx=22)
 
         name_entry = self._modal_entry(body, "Service Name *")
 
@@ -257,37 +266,43 @@ class ServicesView(ctk.CTkFrame):
 
         ctk.CTkLabel(
             body,
-            text="Category",
+            text="Category * (select 1 to 3)",
             text_color=APP_COLORS["foreground"],
             font=APP_FONTS["small"],
         ).pack(anchor="w", pady=(12, 4))
 
-        category_var = ctk.StringVar(value="Residential")
+        category_options = [
+            "Residential",
+            "Commercial",
+            "Deep Clean",
+            "Move In/Out",
+            "Post Construction",
+            "Specialized",
+        ]
 
-        ctk.CTkComboBox(
+        category_vars: dict[str, ctk.BooleanVar] = {}
+
+        category_frame = ctk.CTkFrame(
             body,
-            values=[
-                "Residential",
-                "Commercial",
-                "Deep Clean",
-                "Move In/Out",
-                "Post Construction",
-                "Specialized",
-            ],
-            variable=category_var,
-            height=40,
-            corner_radius=10,
-            border_width=2,
-            border_color=APP_COLORS["border"],
             fg_color=APP_COLORS["card"],
-            button_color=APP_COLORS["muted"],
-            button_hover_color=APP_COLORS["border"],
-            text_color=APP_COLORS["foreground"],
-            dropdown_fg_color=APP_COLORS["card"],
-            dropdown_text_color=APP_COLORS["foreground"],
-            dropdown_hover_color=APP_COLORS["muted"],
-            state="readonly",
-        ).pack(fill="x")
+            corner_radius=10,
+            border_width=1,
+            border_color=APP_COLORS["border"],
+        )
+        category_frame.pack(fill="x")
+
+        for category in category_options:
+            category_vars[category] = ctk.BooleanVar(value=False)
+
+            ctk.CTkCheckBox(
+                category_frame,
+                text=category,
+                variable=category_vars[category],
+                text_color=APP_COLORS["foreground"],
+                font=APP_FONTS["small"],
+                fg_color=APP_COLORS["primary"],
+                hover_color=APP_COLORS["primary_hover"],
+            ).pack(anchor="w", padx=12, pady=3)
 
         row = ctk.CTkFrame(body, fg_color="transparent")
         row.pack(fill="x", pady=(12, 0))
@@ -313,10 +328,17 @@ class ServicesView(ctk.CTkFrame):
             description_entry.insert("1.0", service.description)
             price_entry.insert(0, str(service.base_price))
             duration_entry.insert(0, str(service.duration_hours))
-            category_var.set(self._service_category(service.service_name))
+
+            saved_categories = service.category or "Residential"
+            for category in saved_categories.split(","):
+                cleaned_category = category.strip()
+                if cleaned_category in category_vars:
+                    category_vars[cleaned_category].set(True)
+        else:
+            category_vars["Residential"].set(True)
 
         buttons = ctk.CTkFrame(card, fg_color="transparent")
-        buttons.pack(fill="x", padx=22, pady=(18, 24))
+        buttons.grid(row=2, column=0, sticky="ew", padx=22, pady=(12, 22))
 
         ctk.CTkButton(
             buttons,
@@ -335,7 +357,7 @@ class ServicesView(ctk.CTkFrame):
                 description_entry,
                 price_entry,
                 duration_entry,
-                category_var,
+                category_vars,
             ),
         ).pack(side="right")
 
@@ -362,7 +384,7 @@ class ServicesView(ctk.CTkFrame):
         description_entry: ctk.CTkTextbox,
         price_entry: ctk.CTkEntry,
         duration_entry: ctk.CTkEntry,
-        category_var: ctk.StringVar,
+        category_vars: dict[str, ctk.BooleanVar],
     ) -> None:
         name = name_entry.get().strip()
         description = description_entry.get("1.0", "end").strip()
@@ -371,6 +393,20 @@ class ServicesView(ctk.CTkFrame):
 
         if not name or not description or not price or not duration:
             self._error("Please complete all required fields.")
+            return
+
+        selected_categories = [
+            category
+            for category, variable in category_vars.items()
+            if variable.get()
+        ]
+
+        if len(selected_categories) < 1:
+            self._error("Please select at least one category.")
+            return
+
+        if len(selected_categories) > 3:
+            self._error("Please select no more than three categories.")
             return
 
         try:
@@ -385,12 +421,15 @@ class ServicesView(ctk.CTkFrame):
             return
 
         service_to_save = CleaningService(
-            entity_id=existing_service.entity_id if existing_service else BaseEntity.generate_id(),
+            entity_id=existing_service.entity_id
+            if existing_service
+            else BaseEntity.generate_id(),
             created_at=existing_service.created_at if existing_service else datetime.now(),
             service_name=name,
             description=description,
             duration_hours=duration_hours,
             base_price=base_price,
+            category=", ".join(selected_categories),
         )
 
         ServiceRepository.save_service(service_to_save)
@@ -442,7 +481,12 @@ class ServicesView(ctk.CTkFrame):
 
     def _modal_entry_grid(self, parent, label: str, row: int, column: int) -> ctk.CTkEntry:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.grid(row=row, column=column, sticky="ew", padx=(0, 8) if column == 0 else (8, 0))
+        frame.grid(
+            row=row,
+            column=column,
+            sticky="ew",
+            padx=(0, 8) if column == 0 else (8, 0),
+        )
 
         ctk.CTkLabel(
             frame,
@@ -459,24 +503,6 @@ class ServicesView(ctk.CTkFrame):
         )
         entry.pack(fill="x")
         return entry
-
-    @staticmethod
-    def _service_category(service_name: str) -> str:
-        name = service_name.lower()
-
-        if "office" in name:
-            return "Commercial"
-        if "deep" in name:
-            return "Deep Clean"
-        if "move" in name:
-            return "Move In Out"
-        if "construction" in name:
-            return "Post Construction"
-        if "special" in name:
-            return "Specialized"
-        if "commercial" in name:
-            return "Commercial"
-        return "Residential"
 
     @staticmethod
     def _short_text(text: str, limit: int) -> str:

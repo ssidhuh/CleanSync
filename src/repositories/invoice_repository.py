@@ -1,5 +1,6 @@
 """Repository module for invoice persistence operations."""
 
+import sqlite3
 from datetime import datetime
 
 from src.database.database_manager import DatabaseManager
@@ -21,45 +22,56 @@ class InvoiceRepository(RepositoryInterface[Invoice]):
         """Save invoice information to the database."""
         BookingRepository.save_booking(invoice.booking)
 
-        connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        connection = None
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO invoices (
-                invoice_id,
-                booking_id,
-                total_amount,
-                payment_status,
-                invoice_number,
-                due_date,
-                line_description,
-                quantity,
-                unit_price,
-                tax_rate,
-                notes,
-                created_at
+        try:
+            connection = DatabaseManager.get_connection()
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO invoices (
+                    invoice_id,
+                    booking_id,
+                    total_amount,
+                    payment_status,
+                    invoice_number,
+                    due_date,
+                    line_description,
+                    quantity,
+                    unit_price,
+                    tax_rate,
+                    notes,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    invoice.entity_id,
+                    invoice.booking.entity_id,
+                    invoice.total_amount,
+                    invoice.payment_status,
+                    invoice.invoice_number,
+                    invoice.due_date.isoformat() if invoice.due_date else "",
+                    invoice.line_description,
+                    invoice.quantity,
+                    invoice.unit_price,
+                    invoice.tax_rate,
+                    invoice.notes,
+                    invoice.created_at.isoformat(),
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                invoice.entity_id,
-                invoice.booking.entity_id,
-                invoice.total_amount,
-                invoice.payment_status,
-                invoice.invoice_number,
-                invoice.due_date.isoformat() if invoice.due_date else "",
-                invoice.line_description,
-                invoice.quantity,
-                invoice.unit_price,
-                invoice.tax_rate,
-                invoice.notes,
-                invoice.created_at.isoformat(),
-            ),
-        )
 
-        connection.commit()
-        connection.close()
+            connection.commit()
+
+        except sqlite3.Error:
+            if connection:
+                connection.rollback()
+            raise
+
+        finally:
+            if connection:
+                connection.close()
 
     @staticmethod
     def find_all() -> list[Invoice]:
@@ -127,11 +139,23 @@ class InvoiceRepository(RepositoryInterface[Invoice]):
 
     @staticmethod
     def delete(entity_id: str) -> None:
-        """Delete an invoice by identifier."""
-        connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        """Delete an invoice and its related payment records."""
+        connection = None
 
-        cursor.execute("DELETE FROM invoices WHERE invoice_id = ?", (entity_id,))
+        try:
+            connection = DatabaseManager.get_connection()
+            cursor = connection.cursor()
 
-        connection.commit()
-        connection.close()
+            cursor.execute("DELETE FROM payments WHERE invoice_id = ?", (entity_id,))
+            cursor.execute("DELETE FROM invoices WHERE invoice_id = ?", (entity_id,))
+
+            connection.commit()
+
+        except sqlite3.Error:
+            if connection:
+                connection.rollback()
+            raise
+
+        finally:
+            if connection:
+                connection.close()

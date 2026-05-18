@@ -18,6 +18,7 @@ class CleaningService(BaseEntity):
     description: str
     duration_hours: float
     base_price: float
+    category: str = "Residential"
 
     def calculate_service_cost(self) -> float:
         """

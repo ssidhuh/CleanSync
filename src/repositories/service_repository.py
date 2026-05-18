@@ -16,8 +16,28 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
         ServiceRepository.save_service(entity)
 
     @staticmethod
+    def _ensure_category_column() -> None:
+        """Add category column if the existing database does not have it yet."""
+        connection = DatabaseManager.get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute("PRAGMA table_info(cleaning_services)")
+        columns = [row["name"] for row in cursor.fetchall()]
+
+        if "category" not in columns:
+            cursor.execute(
+                "ALTER TABLE cleaning_services "
+                "ADD COLUMN category TEXT DEFAULT 'Residential'"
+            )
+
+        connection.commit()
+        connection.close()
+
+    @staticmethod
     def save_service(cleaning_service: CleaningService) -> None:
         """Save cleaning service information to the database."""
+        ServiceRepository._ensure_category_column()
+
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
         cursor.execute(
@@ -26,16 +46,18 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
                 service_id,
                 service_name,
                 description,
+                category,
                 duration_hours,
                 base_price,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 cleaning_service.entity_id,
                 cleaning_service.service_name,
                 cleaning_service.description,
+                cleaning_service.category,
                 cleaning_service.duration_hours,
                 cleaning_service.base_price,
                 cleaning_service.created_at.isoformat(),
@@ -47,6 +69,8 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
     @staticmethod
     def find_all() -> list[CleaningService]:
         """Return all cleaning services stored in the database."""
+        ServiceRepository._ensure_category_column()
+
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
         cursor.execute(
@@ -55,6 +79,7 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
                 service_id,
                 service_name,
                 description,
+                category,
                 duration_hours,
                 base_price,
                 created_at
@@ -73,6 +98,7 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
                 description=row["description"],
                 duration_hours=row["duration_hours"],
                 base_price=row["base_price"],
+                category=row["category"] or "Residential",
             )
             for row in rows
         ]

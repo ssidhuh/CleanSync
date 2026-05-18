@@ -47,29 +47,11 @@ class DashboardView(ctk.CTkFrame):
     def _paid_payment_total(self) -> float:
         total = 0.0
 
-        for payment in self.payments:
-            status = str(
-                getattr(payment, "status", getattr(payment, "payment_status", ""))
-            ).lower()
-
-            if status in {"completed", "paid"}:
-                total += float(getattr(payment, "amount", 0) or 0)
-
-        if total > 0:
-            return total
-
         for invoice in self.invoices:
-            total += float(getattr(invoice, "total_amount", 0) or 0)
+            invoice_status = str(invoice.payment_status).strip().lower()
 
-        if total > 0:
-            return total
-
-        for booking in self.bookings:
-            total += float(
-                getattr(booking, "total_amount", 0)
-                or getattr(booking.cleaning_service, "base_price", 0)
-                or 0
-            )
+            if invoice_status == "paid":
+                total += float(invoice.total_amount or 0)
 
         return total
 
@@ -89,57 +71,19 @@ class DashboardView(ctk.CTkFrame):
             "Dec": 0.0,
         }
 
-        added_revenue = False
-
-        for payment in self.payments:
-            status = str(
-                getattr(payment, "status", getattr(payment, "payment_status", ""))
-            ).lower()
-
-            if status not in {"completed", "paid"}:
-                continue
-
-            payment_date = getattr(payment, "payment_date", None) or getattr(
-                payment, "created_at", None
-            )
-
-            if payment_date is None:
-                continue
-
-            month = payment_date.strftime("%b")
-            monthly_revenue[month] += float(getattr(payment, "amount", 0) or 0)
-            added_revenue = True
-
-        if added_revenue:
-            return monthly_revenue
-
         for invoice in self.invoices:
+            invoice_status = str(invoice.payment_status).strip().lower()
+
+            if invoice_status != "paid":
+                continue
+
             invoice_date = getattr(invoice, "created_at", None)
 
             if invoice_date is None:
                 continue
 
             month = invoice_date.strftime("%b")
-            monthly_revenue[month] += float(getattr(invoice, "total_amount", 0) or 0)
-            added_revenue = True
-
-        if added_revenue:
-            return monthly_revenue
-
-        for booking in self.bookings:
-            booking_date = getattr(booking, "booking_date", None)
-
-            if booking_date is None:
-                continue
-
-            amount = (
-                getattr(booking, "total_amount", 0)
-                or getattr(booking.cleaning_service, "base_price", 0)
-                or 0
-            )
-
-            month = booking_date.strftime("%b")
-            monthly_revenue[month] += float(amount)
+            monthly_revenue[month] += float(invoice.total_amount or 0)
 
         return monthly_revenue
 

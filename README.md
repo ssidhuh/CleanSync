@@ -3,7 +3,6 @@
 CleanSync is a modern desktop application developed using Python and Object-Oriented Programming principles for managing cleaning company operations.
 
 The application provides an integrated system for managing customers, cleaners, bookings, schedules, invoices, and payments through a modern graphical user interface.
-
 ---
 
 # Features

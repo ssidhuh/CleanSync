@@ -500,16 +500,17 @@ class BookingsView(ctk.CTkFrame):
 
         current_time = datetime.now()
 
-        if booking_date.date() < current_time.date():
-            self._error("Bookings cannot be created for past dates.")
-            return
+        if existing_booking is None:
+            if booking_date.date() < current_time.date():
+                self._error("Bookings cannot be created for past dates.")
+                return
 
-        if (
-            booking_date.date() == current_time.date()
-            and booking_date.time() < current_time.time()
-        ):
-            self._error("Start time must be in the future.")
-            return
+            if (
+                booking_date.date() == current_time.date()
+                and booking_date.time() < current_time.time()
+            ):
+                self._error("Start time must be in the future.")
+                return
 
         if not self._cleaner_offers_service(cleaner, service.service_name):
             self._error("The selected cleaner does not offer this service.")

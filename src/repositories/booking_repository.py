@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from mysql.connector import IntegrityError
+
 from src.database.database_manager import DatabaseManager
 from src.models.booking import Booking
 from src.repositories.cleaner_repository import CleanerRepository
@@ -23,7 +25,7 @@ class BookingRepository(RepositoryInterface[Booking]):
         """Generate booking numbers for older bookings that do not have one."""
 
         connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
             """
@@ -42,8 +44,8 @@ class BookingRepository(RepositoryInterface[Booking]):
                 cursor.execute(
                     """
                     UPDATE bookings
-                    SET booking_number = ?
-                    WHERE booking_id = ?
+                    SET booking_number = %s
+                    WHERE booking_id = %s
                     """,
                     (f"BOOK-{counter:04d}", row["booking_id"]),
                 )
@@ -51,6 +53,7 @@ class BookingRepository(RepositoryInterface[Booking]):
             counter += 1
 
         connection.commit()
+        cursor.close()
         connection.close()
 
     @staticmethod
@@ -62,7 +65,7 @@ class BookingRepository(RepositoryInterface[Booking]):
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO bookings (
+            INSERT INTO bookings (
                 booking_id,
                 booking_number,
                 customer_id,
@@ -76,7 +79,18 @@ class BookingRepository(RepositoryInterface[Booking]):
                 status,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                booking_number = VALUES(booking_number),
+                customer_id = VALUES(customer_id),
+                cleaner_id = VALUES(cleaner_id),
+                service_id = VALUES(service_id),
+                booking_date = VALUES(booking_date),
+                end_time = VALUES(end_time),
+                address = VALUES(address),
+                total_amount = VALUES(total_amount),
+                notes = VALUES(notes),
+                status = VALUES(status)
             """,
             (
                 booking.entity_id,
@@ -95,6 +109,7 @@ class BookingRepository(RepositoryInterface[Booking]):
         )
 
         connection.commit()
+        cursor.close()
         connection.close()
 
     @staticmethod
@@ -119,7 +134,7 @@ class BookingRepository(RepositoryInterface[Booking]):
         }
 
         connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
 
         cursor.execute(
             """
@@ -142,6 +157,7 @@ class BookingRepository(RepositoryInterface[Booking]):
         )
 
         rows = cursor.fetchall()
+        cursor.close()
         connection.close()
 
         bookings: list[Booking] = []
@@ -180,14 +196,40 @@ class BookingRepository(RepositoryInterface[Booking]):
 
     @staticmethod
     def delete(entity_id: str) -> None:
-        """Delete a booking by identifier."""
+        """Delete a booking with its related invoices and payments."""
 
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
 
-        cursor.execute(
-            "DELETE FROM bookings WHERE booking_id = ?",
-            (entity_id,),
-        )
+        try:
+            cursor.execute(
+                """
+                DELETE payments
+                FROM payments
+                INNER JOIN invoices ON payments.invoice_id = invoices.invoice_id
+                WHERE invoices.booking_id = %s
+                """,
+                (entity_id,),
+            )
 
-        connection.commit()
+            cursor.execute(
+                "DELETE FROM invoices WHERE booking_id = %s",
+                (entity_id,),
+            )
+
+            cursor.execute(
+                "DELETE FROM bookings WHERE booking_id = %s",
+                (entity_id,),
+            )
+
+            connection.commit()
+
+        except IntegrityError as error:
+            connection.rollback()
+            raise ValueError(
+                "This booking could not be deleted because related records still exist."
+            ) from error
+
+        finally:
+            cursor.close()
+            connection.close()

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from tkinter import messagebox
+
 import customtkinter as ctk
 
+from src.database.database_manager import DatabaseManager
 from src.ui.sidebar import Sidebar
 from src.ui.theme import APP_COLORS
 from src.ui.views.booking_view import BookingsView
@@ -27,8 +30,9 @@ class CleanSyncModernApp(ctk.CTk):
         self.geometry("1180x760")
         self.minsize(1180, 760)
         self.configure(fg_color=APP_COLORS["background"])
+        self.protocol("WM_DELETE_WINDOW", self.exit_application)
 
-        self.sidebar = Sidebar(self, self.show_page)
+        self.sidebar = Sidebar(self, self.show_page, self.exit_application)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
@@ -37,6 +41,17 @@ class CleanSyncModernApp(ctk.CTk):
         self.content.pack_propagate(False)
 
         self.show_page("dashboard")
+
+    def exit_application(self) -> None:
+        """Disconnect the database and close the application safely."""
+        confirm_exit = messagebox.askyesno(
+            "Exit CleanSync",
+            "Do you want to disconnect the database and exit CleanSync?",
+        )
+
+        if confirm_exit:
+            DatabaseManager.close_database()
+            self.destroy()
 
     def clear_content(self) -> None:
         """Remove the currently displayed page."""

@@ -24,7 +24,7 @@ class ServicesView(ctk.CTkFrame):
         super().__init__(parent, fg_color=APP_COLORS["background"])
         self.pack(fill="both", expand=True)
 
-        self.cards_frame: ctk.CTkFrame | None = None
+        self.cards_frame: ctk.CTkScrollableFrame | None = None
         self._build_page()
 
     def _build_page(self) -> None:
@@ -68,7 +68,12 @@ class ServicesView(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="e")
 
     def _build_service_cards(self) -> None:
-        self.cards_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.cards_frame = ctk.CTkScrollableFrame(
+            self,
+            fg_color="transparent",
+            scrollbar_button_color=APP_COLORS["border"],
+            scrollbar_button_hover_color=APP_COLORS["muted_text"],
+        )
         self.cards_frame.pack(fill="both", expand=True, padx=30, pady=(0, 30))
         self._refresh_cards()
 

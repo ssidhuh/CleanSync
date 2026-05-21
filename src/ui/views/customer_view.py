@@ -333,20 +333,31 @@ class CustomersView(ctk.CTkFrame):
             )
             return
 
-        cleaned_phone = (
+        formatted_phone = (
             phone_number.replace(" ", "")
             .replace("-", "")
             .replace("(", "")
             .replace(")", "")
-            .replace("+", "")
         )
 
-        if not cleaned_phone.isdigit():
-            self._error("Phone number must contain digits only.")
+        if not formatted_phone.startswith("+371"):
+            self._error(
+                "Phone number must be a valid Latvian number starting with +371."
+            )
             return
 
-        if len(cleaned_phone) < 8 or len(cleaned_phone) > 15:
-            self._error("Phone number must contain 8–15 digits.")
+        local_number = formatted_phone[4:]
+
+        if not local_number.isdigit():
+            self._error(
+                "Latvian phone number must contain digits only after +371."
+            )
+            return
+
+        if len(local_number) != 8:
+            self._error(
+                "Latvian phone number must contain exactly 8 digits after +371."
+            )
             return
 
         if len(address) < 8:
@@ -368,8 +379,12 @@ class CustomersView(ctk.CTkFrame):
             return
 
         customer = Customer(
-            entity_id=existing_customer.entity_id if existing_customer else BaseEntity.generate_id(),
-            created_at=existing_customer.created_at if existing_customer else datetime.now(),
+            entity_id=existing_customer.entity_id
+            if existing_customer
+            else BaseEntity.generate_id(),
+            created_at=existing_customer.created_at
+            if existing_customer
+            else datetime.now(),
             first_name=first_name,
             last_name=last_name,
             phone_number=phone_number,
@@ -382,7 +397,13 @@ class CustomersView(ctk.CTkFrame):
         self._refresh_page()
 
     def _customer_status(self, customer: Customer) -> str:
-        active_statuses = {"pending", "confirmed", "in progress", "in_progress", "assigned"}
+        active_statuses = {
+            "pending",
+            "confirmed",
+            "in progress",
+            "in_progress",
+            "assigned",
+        }
 
         for booking in BookingRepository.find_all():
             same_customer = booking.customer.entity_id == customer.entity_id

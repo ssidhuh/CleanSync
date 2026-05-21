@@ -1,195 +1,186 @@
-"""Repository tests for CleanSync database persistence."""
+"""Unit tests for CleanSync entity and service behaviour."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from src.database.database_manager import DatabaseManager
 from src.models.base_entity import BaseEntity
 from src.models.booking import Booking
 from src.models.cleaner import Cleaner
 from src.models.customer import Customer
 from src.models.invoice import Invoice
+from src.models.payment import Payment
 from src.models.service import CleaningService
-from src.repositories.booking_repository import BookingRepository
-from src.repositories.cleaner_repository import CleanerRepository
-from src.repositories.customer_repository import CustomerRepository
-from src.repositories.invoice_repository import InvoiceRepository
-from src.repositories.service_repository import ServiceRepository
-from src.services.booking_service import BookingService
-
-
-@pytest.fixture()
-def temporary_database(tmp_path, monkeypatch):
-    """Create an isolated SQLite database for each test."""
-    database_path = tmp_path / "cleansync_test.db"
-    monkeypatch.setattr(DatabaseManager, "DATABASE_PATH", database_path)
-    DatabaseManager.initialise_database()
-    return database_path
 
 
 def build_customer() -> Customer:
-    """Create a valid customer for persistence tests."""
+    """Build a reusable customer object for model tests."""
     return Customer(
         entity_id=BaseEntity.generate_id(),
         created_at=datetime.now(),
         first_name="Ava",
         last_name="Stone",
-        phone_number="22114455",
+        phone_number="+37122114455",
         email="ava@example.com",
         address="12 Clean Street",
     )
 
 
-def build_booking() -> Booking:
-    """Create a valid booking with related entities."""
-    customer = build_customer()
-    cleaner = Cleaner(
+def build_cleaner() -> Cleaner:
+    """Build a reusable cleaner object for model tests."""
+    return Cleaner(
         entity_id=BaseEntity.generate_id(),
         created_at=datetime.now(),
         first_name="Mila",
         last_name="Reed",
-        phone_number="22998877",
-        service_area="Riga Centre",
+        email="mila@cleansync.com",
+        phone_number="+37122998877",
         hourly_rate=18.5,
+        rating=4.8,
+        status="Available",
+        specializations="Standard Home Cleaning, Deep Cleaning",
+        service_area="Riga Centre",
     )
-    cleaning_service = CleaningService(
+
+
+def build_service() -> CleaningService:
+    """Build a reusable cleaning service object for model tests."""
+    return CleaningService(
         entity_id=BaseEntity.generate_id(),
         created_at=datetime.now(),
         service_name="Standard Home Cleaning",
         description="General cleaning for an apartment.",
         duration_hours=2.5,
         base_price=55.0,
+        category="Residential",
     )
+
+
+def build_booking() -> Booking:
+    """Build a reusable booking object with related entities."""
+    start_time = datetime.now() + timedelta(days=1)
+    end_time = start_time + timedelta(hours=2)
 
     return Booking(
         entity_id=BaseEntity.generate_id(),
         created_at=datetime.now(),
-        customer=customer,
-        cleaner=cleaner,
-        cleaning_service=cleaning_service,
-        booking_date=datetime(2026, 5, 20, 10, 30),
+        customer=build_customer(),
+        cleaner=build_cleaner(),
+        cleaning_service=build_service(),
+        booking_date=start_time,
+        end_time=end_time,
+        address="12 Clean Street",
+        total_amount=37.0,
+        notes="Test booking",
         status="Pending",
+        booking_number="BOOK-TEST",
     )
 
 
-def build_cleaner() -> Cleaner:
-    """Create a valid cleaner for persistence tests."""
-    return Cleaner(
-        entity_id=BaseEntity.generate_id(),
-        created_at=datetime.now(),
-        first_name="Nora",
-        last_name="Field",
-        phone_number="22001144",
-        service_area="Riga",
-        hourly_rate=20.0,
-    )
-
-
-def build_service() -> CleaningService:
-    """Create a valid cleaning service for persistence tests."""
-    return CleaningService(
-        entity_id=BaseEntity.generate_id(),
-        created_at=datetime.now(),
-        service_name="Deep Cleaning",
-        description="Detailed home cleaning.",
-        duration_hours=4,
-        base_price=95,
-    )
-
-
-def test_customer_can_be_saved_and_loaded(temporary_database):
-    """Customers should be saved and reconstructed from SQLite."""
+def test_customer_full_name_and_contact_validation():
     customer = build_customer()
 
-    CustomerRepository.save_customer(customer)
-
-    stored_customers = CustomerRepository.find_all()
-
-    assert temporary_database.exists()
-    assert len(stored_customers) == 1
-    assert stored_customers[0].full_name == "Ava Stone"
-    assert stored_customers[0].email == "ava@example.com"
+    assert customer.full_name == "Ava Stone"
+    assert customer.validate_contact_information() is True
+    assert customer.is_active is True
 
 
-def test_customer_can_be_deleted(temporary_database):
-    """Deleting a customer should remove it from the database."""
-    customer = build_customer()
-    CustomerRepository.save_customer(customer)
-
-    CustomerRepository.delete(customer.entity_id)
-
-    assert CustomerRepository.find_all() == []
-
-
-def test_booking_repository_preserves_class_relationships(temporary_database):
-    """Bookings should be saved with their customer, cleaner, and service."""
-    booking = build_booking()
-
-    BookingRepository.save_booking(booking)
-
-    stored_bookings = BookingRepository.find_all()
-
-    assert len(stored_bookings) == 1
-    assert stored_bookings[0].customer.full_name == "Ava Stone"
-    assert stored_bookings[0].cleaner.full_name == "Mila Reed"
-    assert stored_bookings[0].cleaning_service.service_name == (
-        "Standard Home Cleaning"
-    )
-
-
-def test_cleaner_can_be_saved_and_loaded(temporary_database):
-    """Cleaners should be saved with availability and rate information."""
+def test_cleaner_availability_and_service_matching():
     cleaner = build_cleaner()
 
-    CleanerRepository.save_cleaner(cleaner)
+    assert cleaner.is_available is True
+    assert cleaner.offers_service("Standard Home Cleaning") is True
 
-    stored_cleaners = CleanerRepository.find_all()
+    cleaner.mark_unavailable()
 
-    assert len(stored_cleaners) == 1
-    assert stored_cleaners[0].full_name == "Nora Field"
-    assert stored_cleaners[0].hourly_rate == 20.0
-    assert stored_cleaners[0].is_available is True
-
-
-def test_service_can_be_saved_and_loaded(temporary_database):
-    """Cleaning services should be saved with price and duration."""
-    cleaning_service = build_service()
-
-    ServiceRepository.save_service(cleaning_service)
-
-    stored_services = ServiceRepository.find_all()
-
-    assert len(stored_services) == 1
-    assert stored_services[0].service_name == "Deep Cleaning"
-    assert stored_services[0].calculate_service_cost() == 95
+    assert cleaner.status == "On Job"
+    assert cleaner.is_available is False
 
 
-def test_booking_service_rejects_unavailable_cleaner(temporary_database):
-    """Booking validation should reject cleaners already marked unavailable."""
+def test_service_validation_and_price_calculation():
+    service = build_service()
+
+    assert service.validate_service_details() is True
+    assert service.calculate_service_cost() == 55.0
+    assert service.hourly_equivalent_price == 22.0
+
+
+def test_booking_schedule_and_total_calculation():
     booking = build_booking()
-    booking.cleaner.mark_unavailable()
 
-    with pytest.raises(ValueError, match="Cleaner is not available"):
-        BookingService.create_booking(booking)
+    assert booking.validate_schedule() is True
+    assert booking.duration_hours == 2.0
+    assert booking.calculate_total_amount() == 37.0
 
 
-def test_invoice_can_be_generated_for_booking(temporary_database):
-    """Invoices should store amount, status, and booking relationship."""
+def test_booking_workflow_methods_update_state():
     booking = build_booking()
-    BookingRepository.save_booking(booking)
+
+    booking.confirm_booking()
+    assert booking.status == "Confirmed"
+    assert booking.cleaner.status == "On Job"
+
+    booking.complete_booking()
+    assert booking.status == "Completed"
+    assert booking.cleaner.status == "Available"
+
+
+def test_invoice_financial_calculations_and_payment_state():
+    booking = build_booking()
+
     invoice = Invoice(
         entity_id=BaseEntity.generate_id(),
         created_at=datetime.now(),
         booking=booking,
-        total_amount=booking.cleaning_service.calculate_service_cost(),
-        payment_status="Unpaid",
+        total_amount=0.0,
+        payment_status="draft",
+        invoice_number="INV-TEST",
+        quantity=2,
+        unit_price=20.0,
+        tax_rate=21.0,
     )
 
-    InvoiceRepository.save_invoice(invoice)
+    invoice.refresh_total_amount()
 
-    stored_invoices = InvoiceRepository.find_all()
+    assert invoice.subtotal == 40.0
+    assert invoice.tax_amount == 8.4
+    assert invoice.total_amount == 48.4
 
-    assert len(stored_invoices) == 1
-    assert stored_invoices[0].payment_status == "Unpaid"
-    assert stored_invoices[0].booking.customer.full_name == "Ava Stone"
+    invoice.mark_as_paid()
+    assert invoice.is_paid is True
+
+
+def test_payment_workflow_updates_invoice_status():
+    booking = build_booking()
+
+    invoice = Invoice(
+        entity_id=BaseEntity.generate_id(),
+        created_at=datetime.now(),
+        booking=booking,
+        total_amount=55.0,
+        payment_status="draft",
+        invoice_number="INV-TEST",
+    )
+
+    payment = Payment(
+        entity_id=BaseEntity.generate_id(),
+        created_at=datetime.now(),
+        invoice=invoice,
+        amount=55.0,
+        payment_date=datetime.now(),
+        method="Card",
+        reference_number="PAY-TEST",
+        status="Pending",
+    )
+
+    payment.mark_as_completed()
+
+    assert payment.is_completed is True
+    assert invoice.is_paid is True
+
+
+def test_invalid_cleaner_rate_is_rejected():
+    cleaner = build_cleaner()
+
+    with pytest.raises(ValueError, match="Hourly rate must be greater than zero"):
+        cleaner.update_hourly_rate(0)

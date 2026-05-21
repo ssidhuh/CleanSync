@@ -8,41 +8,53 @@ from src.repositories.repository_interface import RepositoryInterface
 
 
 class ServiceRepository(RepositoryInterface[CleaningService]):
-    """Handles cleaning service database operations."""
+    """
+    Handles cleaning service persistence operations.
+
+    Service SQL is isolated inside the repository so business
+    entities remain independent from database-specific behaviour.
+    """
 
     @staticmethod
     def save(entity: CleaningService) -> None:
-        """Persist a cleaning service using the common repository interface."""
+        """Use the shared repository contract for polymorphic persistence."""
         ServiceRepository.save_service(entity)
 
     @staticmethod
     def _ensure_category_column() -> None:
-        """Add category column if the existing database does not have it yet."""
+        """Preserve compatibility with older database structures."""
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
 
-        cursor.execute("PRAGMA table_info(cleaning_services)")
-        columns = [row["name"] for row in cursor.fetchall()]
+        cursor.execute(
+            "SHOW COLUMNS FROM cleaning_services LIKE 'category'"
+        )
 
-        if "category" not in columns:
+        column_exists = cursor.fetchone() is not None
+
+        if not column_exists:
             cursor.execute(
-                "ALTER TABLE cleaning_services "
-                "ADD COLUMN category TEXT DEFAULT 'Residential'"
+                """
+                ALTER TABLE cleaning_services
+                ADD COLUMN category TEXT DEFAULT 'Residential'
+                """
             )
 
         connection.commit()
+        cursor.close()
         connection.close()
 
     @staticmethod
     def save_service(cleaning_service: CleaningService) -> None:
-        """Save cleaning service information to the database."""
+        """Persist service state without exposing SQL to the UI layer."""
         ServiceRepository._ensure_category_column()
 
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
+
         cursor.execute(
             """
-            INSERT OR REPLACE INTO cleaning_services (
+            INSERT INTO cleaning_services (
                 service_id,
                 service_name,
                 description,
@@ -51,28 +63,29 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
                 base_price,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                service_name = VALUES(service_name),
+                description = VALUES(description),
+                category = VALUES(category),
+                duration_hours = VALUES(duration_hours),
+                base_price = VALUES(base_price)
             """,
-            (
-                cleaning_service.entity_id,
-                cleaning_service.service_name,
-                cleaning_service.description,
-                cleaning_service.category,
-                cleaning_service.duration_hours,
-                cleaning_service.base_price,
-                cleaning_service.created_at.isoformat(),
-            ),
+            ServiceRepository._to_database_values(cleaning_service),
         )
+
         connection.commit()
+        cursor.close()
         connection.close()
 
     @staticmethod
     def find_all() -> list[CleaningService]:
-        """Return all cleaning services stored in the database."""
+        """Return entity objects instead of exposing raw database rows."""
         ServiceRepository._ensure_category_column()
 
         connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
+
         cursor.execute(
             """
             SELECT
@@ -87,30 +100,55 @@ class ServiceRepository(RepositoryInterface[CleaningService]):
             ORDER BY service_name
             """
         )
+
         rows = cursor.fetchall()
+        cursor.close()
         connection.close()
 
         return [
-            CleaningService(
-                entity_id=row["service_id"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                service_name=row["service_name"],
-                description=row["description"],
-                duration_hours=row["duration_hours"],
-                base_price=row["base_price"],
-                category=row["category"] or "Residential",
-            )
+            ServiceRepository._from_database_row(row)
             for row in rows
         ]
 
     @staticmethod
     def delete(entity_id: str) -> None:
-        """Delete a cleaning service by identifier."""
+        """Keep deletion behaviour isolated from the user interface."""
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
+
         cursor.execute(
-            "DELETE FROM cleaning_services WHERE service_id = ?",
+            "DELETE FROM cleaning_services WHERE service_id = %s",
             (entity_id,),
         )
+
         connection.commit()
+        cursor.close()
         connection.close()
+
+    @staticmethod
+    def _to_database_values(
+        cleaning_service: CleaningService,
+    ) -> tuple:
+        """Keep database mapping centralised for easier maintenance."""
+        return (
+            cleaning_service.entity_id,
+            cleaning_service.service_name,
+            cleaning_service.description,
+            cleaning_service.category,
+            cleaning_service.duration_hours,
+            cleaning_service.base_price,
+            cleaning_service.created_at.isoformat(),
+        )
+
+    @staticmethod
+    def _from_database_row(row: dict) -> CleaningService:
+        """Hide row reconstruction so callers only handle entities."""
+        return CleaningService(
+            entity_id=row["service_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            service_name=row["service_name"],
+            description=row["description"],
+            duration_hours=row["duration_hours"],
+            base_price=row["base_price"],
+            category=row["category"] or "Residential",
+        )

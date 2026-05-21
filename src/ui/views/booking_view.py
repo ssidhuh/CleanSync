@@ -565,13 +565,18 @@ class BookingsView(ctk.CTkFrame):
     def _delete_booking(self, booking: Booking) -> None:
         confirmed = messagebox.askyesno(
             "Delete Booking",
-            f"Delete booking for {booking.customer.full_name}?",
+            f"Delete booking for {booking.customer.full_name} and its related invoice/payment records?",
         )
 
         if not confirmed:
             return
 
-        BookingRepository.delete(booking.entity_id)
+        try:
+            BookingRepository.delete(booking.entity_id)
+        except ValueError as error:
+            self._error(str(error))
+            return
+
         self._refresh_whole_page()
 
     def _filtered_bookings(self) -> list[Booking]:

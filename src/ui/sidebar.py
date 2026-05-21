@@ -20,7 +20,7 @@ NAV_ITEMS = [
 class Sidebar(ctk.CTkFrame):
     """Left navigation sidebar used to switch between CleanSync views."""
 
-    def __init__(self, parent, on_navigation):
+    def __init__(self, parent, on_navigation, on_exit):
         super().__init__(
             parent,
             width=240,
@@ -28,12 +28,14 @@ class Sidebar(ctk.CTkFrame):
             corner_radius=0,
         )
         self.on_navigation = on_navigation
+        self.on_exit = on_exit
         self.active_page = "dashboard"
         self.buttons = {}
 
         self.grid_propagate(False)
         self._build_logo()
         self._build_navigation()
+        self._build_exit_button()
 
     def _build_logo(self):
         logo_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -79,6 +81,24 @@ class Sidebar(ctk.CTkFrame):
             self.buttons[page_key] = button
 
         self._refresh_active_button()
+
+    def _build_exit_button(self):
+        exit_frame = ctk.CTkFrame(self, fg_color="transparent")
+        exit_frame.pack(fill="x", side="bottom", padx=10, pady=(8, 16))
+
+        exit_button = ctk.CTkButton(
+            exit_frame,
+            text="🚪  Exit",
+            anchor="w",
+            height=42,
+            corner_radius=10,
+            font=APP_FONTS["body"],
+            fg_color="#DC2626",
+            hover_color="#B91C1C",
+            text_color="#FFFFFF",
+            command=self.on_exit,
+        )
+        exit_button.pack(fill="x")
 
     def select_page(self, page_key):
         self.active_page = page_key

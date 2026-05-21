@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+from mysql.connector import IntegrityError
+
 from src.database.database_manager import DatabaseManager
 from src.models.customer import Customer
 from src.repositories.repository_interface import RepositoryInterface
@@ -9,31 +11,26 @@ from src.repositories.repository_interface import RepositoryInterface
 
 class CustomerRepository(RepositoryInterface[Customer]):
     """
-    Handles customer database operations.
+    Handles customer persistence operations.
 
-    Keeping customer SQL separate from the user interface
-    prevents the GUI from becoming difficult to maintain.
+    Keeping SQL inside the repository prevents database logic
+    from leaking into the user interface.
     """
 
     @staticmethod
     def save(entity: Customer) -> None:
-        """Persist a customer using the common repository interface."""
+        """Use the shared repository contract for polymorphic persistence."""
         CustomerRepository.save_customer(entity)
 
     @staticmethod
     def save_customer(customer: Customer) -> None:
-        """
-        Save customer information to the database.
-
-        Args:
-            customer (Customer): Customer instance to persist.
-        """
+        """Persist customer state without exposing SQL to the UI layer."""
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO customers (
+            INSERT INTO customers (
                 customer_id,
                 first_name,
                 last_name,
@@ -42,32 +39,27 @@ class CustomerRepository(RepositoryInterface[Customer]):
                 address,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                first_name = VALUES(first_name),
+                last_name = VALUES(last_name),
+                phone_number = VALUES(phone_number),
+                email = VALUES(email),
+                address = VALUES(address)
             """,
-            (
-                customer.entity_id,
-                customer.first_name,
-                customer.last_name,
-                customer.phone_number,
-                customer.email,
-                customer.address,
-                str(customer.created_at),
-            ),
+            CustomerRepository._to_database_values(customer),
         )
 
         connection.commit()
+        cursor.close()
         connection.close()
 
     @staticmethod
     def find_all() -> list[Customer]:
-        """
-        Return all customers stored in the database.
-
-        Returns:
-            list[Customer]: Customer objects reconstructed from SQLite rows.
-        """
+        """Return Customer objects so higher layers avoid raw database rows."""
         connection = DatabaseManager.get_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
+
         cursor.execute(
             """
             SELECT
@@ -82,32 +74,59 @@ class CustomerRepository(RepositoryInterface[Customer]):
             ORDER BY last_name, first_name
             """
         )
+
         rows = cursor.fetchall()
+        cursor.close()
         connection.close()
 
         return [
-            Customer(
-                entity_id=row["customer_id"],
-                created_at=datetime.fromisoformat(row["created_at"]),
-                first_name=row["first_name"],
-                last_name=row["last_name"],
-                phone_number=row["phone_number"],
-                email=row["email"],
-                address=row["address"],
-            )
+            CustomerRepository._from_database_row(row)
             for row in rows
         ]
 
     @staticmethod
     def delete(entity_id: str) -> None:
-        """
-        Delete a customer by identifier.
-
-        Args:
-            entity_id (str): Customer identifier.
-        """
+        """Protect booking history by blocking unsafe customer deletion."""
         connection = DatabaseManager.get_connection()
         cursor = connection.cursor()
-        cursor.execute("DELETE FROM customers WHERE customer_id = ?", (entity_id,))
-        connection.commit()
-        connection.close()
+
+        try:
+            cursor.execute(
+                "DELETE FROM customers WHERE customer_id = %s",
+                (entity_id,),
+            )
+            connection.commit()
+        except IntegrityError as error:
+            connection.rollback()
+            raise ValueError(
+                "This customer cannot be deleted because they are linked to existing bookings."
+            ) from error
+        finally:
+            cursor.close()
+            connection.close()
+
+    @staticmethod
+    def _to_database_values(customer: Customer) -> tuple:
+        """Keep database mapping in one place for easier maintenance."""
+        return (
+            customer.entity_id,
+            customer.first_name,
+            customer.last_name,
+            customer.phone_number,
+            customer.email,
+            customer.address,
+            customer.created_at.isoformat(),
+        )
+
+    @staticmethod
+    def _from_database_row(row: dict) -> Customer:
+        """Hide row reconstruction so callers only handle Customer objects."""
+        return Customer(
+            entity_id=row["customer_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            first_name=row["first_name"],
+            last_name=row["last_name"],
+            phone_number=row["phone_number"],
+            email=row["email"],
+            address=row["address"],
+        )

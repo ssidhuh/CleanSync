@@ -8,23 +8,23 @@ T = TypeVar("T")
 
 class RepositoryInterface(ABC, Generic[T]):
     """
-    Defines common persistence behaviour for repository classes.
+    Defines a shared persistence contract for repository classes.
 
-    The interface supports the assessment requirement for abstraction while
-    keeping SQL details hidden from the user interface and service layers.
+    The interface keeps storage behaviour consistent while allowing
+    each repository to implement entity-specific SQL details separately.
     """
 
     @staticmethod
     @abstractmethod
     def save(entity: T) -> None:
-        """Persist an entity."""
+        """Require every repository to support object persistence."""
 
     @staticmethod
     @abstractmethod
     def find_all() -> list[T]:
-        """Return all stored entities."""
+        """Require every repository to return entity objects, not raw rows."""
 
     @staticmethod
     @abstractmethod
     def delete(entity_id: str) -> None:
-        """Delete an entity by its identifier."""
+        """Require deletion behaviour without exposing SQL to the UI."""

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -16,6 +18,14 @@ from src.ui.theme import APP_COLORS, APP_FONTS
 
 class DashboardView(ctk.CTkFrame):
     """Dashboard page showing business statistics and recent activity."""
+
+    ACTIVE_BOOKING_STATUSES = {
+        "pending",
+        "confirmed",
+        "assigned",
+        "in_progress",
+        "in progress",
+    }
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])
@@ -42,7 +52,7 @@ class DashboardView(ctk.CTkFrame):
         self._build_header()
         self._build_stat_cards()
         self._build_charts_section()
-        self._build_recent_bookings()
+        self._build_bottom_section()
 
     def _paid_payment_total(self) -> float:
         total = 0.0
@@ -54,6 +64,60 @@ class DashboardView(ctk.CTkFrame):
                 total += float(invoice.total_amount or 0)
 
         return total
+
+    def _booking_status(self, booking) -> str:
+        return str(getattr(booking, "status", "")).strip().lower()
+
+    def _is_active_booking(self, booking) -> bool:
+        return self._booking_status(booking) in self.ACTIVE_BOOKING_STATUSES
+
+    def _is_cancelled_booking(self, booking) -> bool:
+        return self._booking_status(booking) == "cancelled"
+
+    def _invoice_has_cancelled_booking(self, invoice) -> bool:
+        invoice_booking = getattr(invoice, "booking", None)
+
+        if invoice_booking is not None:
+            return self._is_cancelled_booking(invoice_booking)
+
+        invoice_booking_id = getattr(invoice, "booking_id", None)
+
+        for booking in self.bookings:
+            booking_id = getattr(booking, "entity_id", None)
+
+            if booking_id == invoice_booking_id:
+                return self._is_cancelled_booking(booking)
+
+        return False
+
+    def _active_customer_count(self) -> int:
+        active_customer_ids = set()
+
+        for booking in self.bookings:
+            if not self._is_active_booking(booking):
+                continue
+
+            booking_customer = getattr(booking, "customer", None)
+            customer_id = getattr(booking_customer, "entity_id", None)
+
+            if customer_id is None:
+                customer_id = getattr(booking, "customer_id", None)
+
+            if customer_id is None and booking_customer is not None:
+                customer_id = booking_customer.full_name
+
+            if customer_id is not None:
+                active_customer_ids.add(customer_id)
+
+        return len(active_customer_ids)
+
+    def _unpaid_invoice_total(self) -> float:
+        return sum(
+            float(invoice.total_amount or 0)
+            for invoice in self.invoices
+            if str(invoice.payment_status).strip().lower() != "paid"
+            and not self._invoice_has_cancelled_booking(invoice)
+        )
 
     def _monthly_revenue_data(self) -> dict[str, float]:
         monthly_revenue = {
@@ -87,6 +151,46 @@ class DashboardView(ctk.CTkFrame):
 
         return monthly_revenue
 
+    def _cleaner_job_count(self, cleaner) -> int:
+        job_count = 0
+
+        for booking in self.bookings:
+            if self._is_cancelled_booking(booking):
+                continue
+
+            booking_cleaner = getattr(booking, "cleaner", None)
+
+            if booking_cleaner is cleaner:
+                job_count += 1
+                continue
+
+            if getattr(booking_cleaner, "entity_id", None) == cleaner.entity_id:
+                job_count += 1
+
+        return job_count
+
+    def _team_performance_data(self) -> list[dict]:
+        performance = []
+
+        for cleaner in self.cleaners:
+            if not cleaner.is_active:
+                continue
+
+            performance.append(
+                {
+                    "name": cleaner.full_name,
+                    "initial": cleaner.first_name[:1].upper(),
+                    "jobs": self._cleaner_job_count(cleaner),
+                    "rating": cleaner.rating,
+                }
+            )
+
+        return sorted(
+            performance,
+            key=lambda item: (item["jobs"], item["rating"]),
+            reverse=True,
+        )[:4]
+
     def _build_header(self) -> None:
         header = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
         header.pack(fill="x", padx=30, pady=(26, 18))
@@ -110,32 +214,57 @@ class DashboardView(ctk.CTkFrame):
         cards.pack(fill="x", padx=30, pady=(0, 22))
 
         total_revenue = self._paid_payment_total()
+        active_customers = self._active_customer_count()
 
-        active_cleaners = len(
+        free_cleaners = len(
             [cleaner for cleaner in self.cleaners if cleaner.is_available]
         )
+        on_job_cleaners = len(self.cleaners) - free_cleaners
 
         active_bookings = len(
+            [booking for booking in self.bookings if self._is_active_booking(booking)]
+        )
+
+        today_bookings = len(
             [
                 booking
                 for booking in self.bookings
-                if str(booking.status).lower()
-                in {"pending", "confirmed", "assigned", "in_progress", "in progress"}
+                if booking.booking_date.date() == date.today()
             ]
         )
 
+        unpaid_total = self._unpaid_invoice_total()
+
         stats = [
-            ("Total Customers", len(self.customers), "👤"),
-            ("Active Cleaners", active_cleaners, "🧢"),
-            ("Active Bookings", active_bookings, "🗓️"),
-            ("Total Revenue", f"€{total_revenue:,.2f}", "€"),
+            ("Total Customers", len(self.customers), "👤", f"{active_customers} active"),
+            (
+                "Active Cleaners",
+                free_cleaners,
+                "🧢",
+                f"{on_job_cleaners} on job · {free_cleaners} free",
+            ),
+            ("Active Bookings", active_bookings, "🗓️", f"{today_bookings} today"),
+            (
+                "Total Revenue",
+                f"€{total_revenue:,.2f}",
+                "€",
+                f"€{unpaid_total:,.2f} unpaid",
+            ),
         ]
 
-        for index, (title, value, icon) in enumerate(stats):
+        for index, (title, value, icon, subtitle) in enumerate(stats):
             cards.grid_columnconfigure(index, weight=1)
-            self._stat_card(cards, title, value, icon, index)
+            self._stat_card(cards, title, value, icon, subtitle, index)
 
-    def _stat_card(self, parent, title: str, value, icon: str, column: int) -> None:
+    def _stat_card(
+        self,
+        parent,
+        title: str,
+        value,
+        icon: str,
+        subtitle: str,
+        column: int,
+    ) -> None:
         card = ctk.CTkFrame(
             parent,
             fg_color=APP_COLORS["card"],
@@ -146,7 +275,7 @@ class DashboardView(ctk.CTkFrame):
         card.grid(row=0, column=column, sticky="ew", padx=8)
 
         top_row = ctk.CTkFrame(card, fg_color="transparent")
-        top_row.pack(fill="x", padx=18, pady=(16, 6))
+        top_row.pack(fill="x", padx=18, pady=(16, 4))
 
         ctk.CTkLabel(
             top_row,
@@ -162,7 +291,14 @@ class DashboardView(ctk.CTkFrame):
             text=str(value),
             text_color=APP_COLORS["foreground"],
             font=("Inter", 27, "bold"),
-        ).pack(anchor="w", padx=18, pady=(0, 18))
+        ).pack(anchor="w", padx=18)
+
+        ctk.CTkLabel(
+            card,
+            text=subtitle,
+            text_color=APP_COLORS["primary"],
+            font=("Inter", 12, "bold"),
+        ).pack(anchor="w", padx=18, pady=(2, 14))
 
     def _build_charts_section(self) -> None:
         section = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
@@ -343,10 +479,21 @@ class DashboardView(ctk.CTkFrame):
         canvas.mpl_connect("motion_notify_event", on_motion)
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=12, pady=(4, 14))
 
-    def _build_recent_bookings(self) -> None:
-        card = self._basic_card(self.scroll_frame, "Recent Bookings")
-        card.pack(fill="both", expand=True, padx=30, pady=(0, 28))
+    def _build_bottom_section(self) -> None:
+        section = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
+        section.pack(fill="both", expand=True, padx=30, pady=(0, 28))
+        section.grid_columnconfigure(0, weight=2)
+        section.grid_columnconfigure(1, weight=1)
 
+        recent_card = self._basic_card(section, "Recent Bookings")
+        recent_card.grid(row=0, column=0, sticky="nsew", padx=(0, 11))
+        self._build_recent_bookings(recent_card)
+
+        team_card = self._basic_card(section, "⭐ Team Performance")
+        team_card.grid(row=0, column=1, sticky="nsew", padx=(11, 0))
+        self._build_team_performance(team_card)
+
+    def _build_recent_bookings(self, card) -> None:
         recent_bookings = self.bookings[-8:]
 
         if not recent_bookings:
@@ -360,6 +507,74 @@ class DashboardView(ctk.CTkFrame):
 
         for booking in reversed(recent_bookings):
             self._booking_row(card, booking)
+
+    def _build_team_performance(self, parent) -> None:
+        performance_data = self._team_performance_data()
+
+        if not performance_data:
+            ctk.CTkLabel(
+                parent,
+                text="No cleaner performance data yet.",
+                text_color=APP_COLORS["muted_text"],
+                font=APP_FONTS["body"],
+            ).pack(pady=44)
+            return
+
+        max_jobs = max(item["jobs"] for item in performance_data) or 1
+
+        for item in performance_data:
+            self._team_performance_row(parent, item, max_jobs)
+
+    def _team_performance_row(self, parent, item: dict, max_jobs: int) -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=18, pady=8)
+
+        ctk.CTkLabel(
+            row,
+            text=item["initial"],
+            width=28,
+            height=28,
+            fg_color="#dff4fb",
+            text_color=APP_COLORS["primary"],
+            corner_radius=14,
+            font=("Inter", 11, "bold"),
+        ).pack(side="left", padx=(0, 10))
+
+        info = ctk.CTkFrame(row, fg_color="transparent")
+        info.pack(side="left", fill="x", expand=True)
+
+        top = ctk.CTkFrame(info, fg_color="transparent")
+        top.pack(fill="x")
+
+        ctk.CTkLabel(
+            top,
+            text=item["name"],
+            text_color=APP_COLORS["foreground"],
+            font=("Inter", 12, "bold"),
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            top,
+            text=f"{item['jobs']} jobs",
+            text_color=APP_COLORS["muted_text"],
+            font=APP_FONTS["small"],
+        ).pack(side="right", padx=(0, 8))
+
+        progress = ctk.CTkProgressBar(
+            info,
+            height=6,
+            progress_color=APP_COLORS["accent"],
+            fg_color=APP_COLORS["muted"],
+        )
+        progress.pack(fill="x", pady=(4, 0))
+        progress.set(item["jobs"] / max_jobs)
+
+        ctk.CTkLabel(
+            row,
+            text=f"⭐ {item['rating']:.1f}",
+            text_color=APP_COLORS["foreground"],
+            font=("Inter", 11, "bold"),
+        ).pack(side="right", padx=(8, 0))
 
     def _booking_row(self, parent, booking) -> None:
         row = ctk.CTkFrame(parent, fg_color=APP_COLORS["muted"], corner_radius=14)

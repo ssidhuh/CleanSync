@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from tkinter import messagebox
 
 import customtkinter as ctk
@@ -36,11 +37,62 @@ class CleanSyncModernApp(ctk.CTk):
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        self.content = ctk.CTkFrame(self, fg_color=APP_COLORS["background"])
-        self.content.pack(side="left", fill="both", expand=True)
+        self.main_area = ctk.CTkFrame(self, fg_color=APP_COLORS["background"])
+        self.main_area.pack(side="left", fill="both", expand=True)
+        self.main_area.pack_propagate(False)
+
+        self._build_top_bar()
+
+        self.content = ctk.CTkFrame(self.main_area, fg_color=APP_COLORS["background"])
+        self.content.pack(side="top", fill="both", expand=True)
         self.content.pack_propagate(False)
 
         self.show_page("dashboard")
+
+    def _build_top_bar(self) -> None:
+        """Create the simple greeting bar above the page content."""
+        top_bar = ctk.CTkFrame(
+            self.main_area,
+            height=66,
+            fg_color=APP_COLORS["card"],
+            corner_radius=0,
+        )
+        top_bar.pack(side="top", fill="x")
+        top_bar.pack_propagate(False)
+
+        greeting_frame = ctk.CTkFrame(top_bar, fg_color="transparent")
+        greeting_frame.pack(side="left", padx=30, pady=(9, 9))
+
+        greeting = ctk.CTkLabel(
+            greeting_frame,
+            text=self._get_greeting_text(),
+            font=("Inter", 13, "bold"),
+            text_color=APP_COLORS["foreground"],
+        )
+        greeting.pack(anchor="w")
+
+        date_label = ctk.CTkLabel(
+            greeting_frame,
+            text=self._get_current_date_text(),
+            font=("Inter", 12),
+            text_color=APP_COLORS["muted_text"],
+        )
+        date_label.pack(anchor="w")
+
+    def _get_greeting_text(self) -> str:
+        """Return a time-aware greeting for the top bar."""
+        current_hour = datetime.now().hour
+
+        if current_hour < 12:
+            return "Good morning 👋"
+        if current_hour < 18:
+            return "Good afternoon 👋"
+
+        return "Good evening 👋"
+
+    def _get_current_date_text(self) -> str:
+        """Return the current date in a clean readable format."""
+        return datetime.now().strftime("%A, %B %-d, %Y")
 
     def exit_application(self) -> None:
         """Disconnect the database and close the application safely."""

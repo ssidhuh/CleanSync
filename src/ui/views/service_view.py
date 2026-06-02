@@ -14,7 +14,7 @@ from src.ui.theme import APP_COLORS, APP_FONTS
 
 
 class ServicesView(ctk.CTkFrame):
-    """Services page with Base44-style service cards and modal form."""
+    """Services page with service cards and modal form."""
 
     CARD_WIDTH = 330
     CARD_HEIGHT = 210

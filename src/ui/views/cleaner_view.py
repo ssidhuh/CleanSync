@@ -16,7 +16,7 @@ from src.ui.theme import APP_COLORS, APP_FONTS
 
 
 class CleanersView(ctk.CTkFrame):
-    """Cleaners page with Base44-style cards and modal form."""
+    """Cleaners page with cards and modal form."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])

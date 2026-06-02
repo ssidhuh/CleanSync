@@ -18,7 +18,7 @@ PAYMENT_STATUSES = ["pending", "completed", "failed", "refunded"]
 
 
 class PaymentsView(ctk.CTkFrame):
-    """Payments page with Base44-style table and payment modal."""
+    """Payments page with table and payment modal."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])

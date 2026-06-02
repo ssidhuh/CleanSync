@@ -17,7 +17,7 @@ INVOICE_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"]
 
 
 class InvoicesView(ctk.CTkFrame):
-    """Invoices page with Base44-style table and modal invoice workflow."""
+    """Invoices page with  table and modal invoice workflow."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])

@@ -12,7 +12,7 @@ from src.ui.theme import APP_COLORS, APP_FONTS
 
 
 class ScheduleView(ctk.CTkFrame):
-    """Weekly schedule page translated from the Base44 schedule layout."""
+    """Weekly schedule page translated from the  schedule layout."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])

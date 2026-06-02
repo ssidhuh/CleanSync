@@ -19,7 +19,7 @@ BOOKING_STATUSES = ["Pending", "Confirmed", "In Progress", "Completed", "Cancell
 
 
 class BookingsView(ctk.CTkFrame):
-    """Bookings page with Base44-style table and modal booking workflow."""
+    """Bookings page with  table and modal booking workflow."""
 
     def __init__(self, parent) -> None:
         super().__init__(parent, fg_color=APP_COLORS["background"])

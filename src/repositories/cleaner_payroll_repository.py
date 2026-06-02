@@ -124,10 +124,11 @@ class CleanerPayrollRepository:
 
     @classmethod
     def _payment_status(cls, week_end: datetime) -> str:
-        """Keep automatic payroll status rules in one place."""
+        """Mark previous payroll weeks as paid after payroll Monday."""
         today = datetime.now().date()
+        payroll_monday = week_end.date() + timedelta(days=1)
 
-        if today.weekday() == 0 and week_end.date() < today:
+        if today >= payroll_monday:
             return cls.PAID_STATUS
 
         return cls.PENDING_STATUS
